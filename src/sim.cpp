@@ -70,6 +70,11 @@ inline void rewardSystem(Engine &,
     LOG("Hello from reward system!\n");
 }
 
+inline void nopSystem(Engine &,
+                      ma::Entity)
+{
+}
+
 template <typename ArchetypeT>
 ma::TaskGraph::NodeID queueSortByWorld(ma::TaskGraph::Builder &builder,
                                        ma::Span<const ma::TaskGraph::NodeID> deps)
@@ -117,7 +122,11 @@ static void setupStepTasks(ma::TaskGraphBuilder &builder,
 static void setupSensorTasks(ma::TaskGraphBuilder &builder, 
                              const Sim::Config &cfg)
 {
-    ma::render::RenderingSystem::setupTasks(builder, {});
+    //ma::render::RenderingSystem::setupTasks(builder, {});
+    auto nop_system = builder.addToGraph<ma::ParallelForNode<Engine,
+         nopSystem,
+            ma::Entity
+        >>({});
 }
 
 // Build the task graph
