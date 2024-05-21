@@ -4,12 +4,15 @@
 #include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>
 
+#include "mgr.h"
+
 namespace nb = nanobind;
 using namespace nb::literals;
 
 void greet()
 {
-    printf("Hello world\n");
+    // Manager mgr;
+    // mgr.greet();
 }
 
 NB_MODULE(madrona_bots, m) {

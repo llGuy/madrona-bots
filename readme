@@ -1,1 +1,16 @@
-Repository contains code for Madrona Script Bots
+# Repository contains code for Madrona Script Bots
+
+## Setup
+
+```
+cmake -S . -B build
+cd build
+make -j[number of processes]
+```
+
+In the root directory of the project, create a venv:
+
+```
+python -m venv botenv
+pip install -e .
+```
