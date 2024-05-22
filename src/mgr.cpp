@@ -59,7 +59,7 @@ Manager::Impl *Manager::Impl::make(const Config &mgr_cfg)
 {
     // Initialize the GPU executor and launch graphs
     mbots::Sim::Config sim_cfg = {
-        .numAgentsPerWorld = 32, // TODO: Allow for finer control over this.
+        .numAgentsPerWorld = 3, // TODO: Allow for finer control over this.
         .initRandKey = ma::rand::initKey(mgr_cfg.randSeed)
     };
 
@@ -89,6 +89,9 @@ Manager::Impl *Manager::Impl::make(const Config &mgr_cfg)
         .userCompileFlags = { MBOTS_COMPILE_FLAGS },
         .optMode = ma::CompileConfig::OptMode::LTO
     };
+
+    printf("%p\n", compile_cfg.userSources[0]);
+    printf("%s\n", compile_cfg.userSources[0]);
 
     CUcontext cu_ctx = ma::MWCudaExecutor::initCUDA(mgr_cfg.gpuID);
     ma::MWCudaExecutor gpu_exec(state_cfg, compile_cfg, cu_ctx);
