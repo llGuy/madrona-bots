@@ -42,6 +42,14 @@ struct Manager::Impl {
         gpuExec.run(stepGraph);
         gpuExec.run(sensorGraph);
     }
+
+    inline ma::py::Tensor exportTensor(mbots::ExportID slot,
+        ma::py::TensorElementType type,
+        ma::Span<const int64_t> dims) const
+    {
+        void *dev_ptr = gpuExec.getExported((uint32_t)slot);
+        return ma::py::Tensor(dev_ptr, type, dims, cfg.gpuID);
+    }
 };
 
 Manager::Impl::Impl(const Config &mgr_cfg,
@@ -59,7 +67,7 @@ Manager::Impl *Manager::Impl::make(const Config &mgr_cfg)
 {
     // Initialize the GPU executor and launch graphs
     mbots::Sim::Config sim_cfg = {
-        .numAgentsPerWorld = 2, // TODO: Allow for finer control over this.
+        .numAgentsPerWorld = mgr_cfg.numAgentsPerWorld,
         .initRandKey = ma::rand::initKey(mgr_cfg.randSeed)
     };
 
@@ -80,7 +88,7 @@ Manager::Impl *Manager::Impl::make(const Config &mgr_cfg)
         .numWorlds = mgr_cfg.numWorlds,
         .numTaskGraphs = (uint32_t)mbots::TaskGraphID::NumTaskGraphs,
         .numExportedBuffers = (uint32_t)mbots::ExportID::NumExports,
-        .raycastOutputResolution = 32,
+        .raycastOutputResolution = mgr_cfg.sensorSize,
         .nearSphere = 1.1f,
     };
 
@@ -123,4 +131,16 @@ Manager::~Manager()
 void Manager::step()
 {
     impl_->step();
+}
+
+ma::py::Tensor Manager::sensorTensor() const
+{
+    uint32_t pixels_per_view = impl_->cfg.sensorSize;
+    return impl_->exportTensor(mbots::ExportID::Sensor,
+                               ma::py::TensorElementType::UInt8,
+                               {
+                                   impl_->cfg.numWorlds * 
+                                        impl_->cfg.numAgentsPerWorld,
+                                   pixels_per_view,
+                               });
 }

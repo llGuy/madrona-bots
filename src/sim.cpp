@@ -79,17 +79,14 @@ inline void actionSystem(Engine &ctx,
                          ma::base::Position &pos,
                          Action &action)
 {
-    LOG("Hello from actionSystem!\n");
-
     // For now, the action is just going to rotate the entities.
-    rot *= ma::math::Quat::angleAxis(0.01f, ma::math::Vector3{ 0.f, 0.f, 1.f });
+    rot *= ma::math::Quat::angleAxis(0.1f, ma::math::Vector3{ 0.f, 0.f, 1.f });
 }
 
 inline void rewardSystem(Engine &,
                          ma::base::Position pos,
                          Reward &out_reward)
 {
-    LOG("Hello from reward system!\n");
 }
 
 inline void nopSystem(Engine &,
