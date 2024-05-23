@@ -17,6 +17,7 @@ enum class ExportID : uint32_t {
     Action,
     Reward,
     Done,
+    Sensor,
     NumExports
 };
 

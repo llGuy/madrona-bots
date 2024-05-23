@@ -39,13 +39,32 @@ void Sim::registerTypes(ma::ECSRegistry &registry, const Config &cfg)
         (uint32_t)ExportID::Reward);
     registry.exportColumn<Agent, Done>(
         (uint32_t)ExportID::Done);
+    registry.exportColumn<ma::render::RaycastOutputArchetype,
+        ma::render::RenderOutputBuffer>(
+            (uint32_t)ExportID::Sensor);
 }
 
 static inline void initWorld(Engine &ctx)
 {
     for (int i = 0; i < ctx.data().numAgents; ++i) {
         auto entity = ctx.makeRenderableEntity<Agent>();
-        (void)entity;
+
+        // Initialize the entities with some positions
+        ctx.get<ma::base::Position>(entity) = ma::math::Vector3{
+            i * 10.f, 0.f, 0.f
+        };
+
+        ctx.get<ma::base::Rotation>(entity) =
+            ma::math::Quat::angleAxis(0.f, ma::math::Vector3{0.f, 0.f, 1.f});
+
+        ctx.get<ma::base::Scale>(entity) = ma::math::Diag3x3{
+            1.f, 1.f, 1.f
+        };
+
+        // Attach a view to this entity so that sensor data gets generated
+        // for it.
+        ma::render::RenderingSystem::attachEntityToView(
+            ctx, entity, 90.f, 0.1f, { 0.f, 0.f, 0.f });
     }
 }
 
@@ -61,6 +80,9 @@ inline void actionSystem(Engine &ctx,
                          Action &action)
 {
     LOG("Hello from actionSystem!\n");
+
+    // For now, the action is just going to rotate the entities.
+    rot *= ma::math::Quat::angleAxis(0.01f, ma::math::Vector3{ 0.f, 0.f, 1.f });
 }
 
 inline void rewardSystem(Engine &,
@@ -107,9 +129,6 @@ static void setupStepTasks(ma::TaskGraphBuilder &builder,
             Reward
         >>({action_sys});
 
-
-
-
     // Required
     auto clear_tmp = builder.addToGraph<ma::ResetTmpAllocNode>({reward_sys});
     auto recycle_sys = builder.addToGraph<ma::RecycleEntitiesNode>({clear_tmp});
@@ -122,11 +141,8 @@ static void setupStepTasks(ma::TaskGraphBuilder &builder,
 static void setupSensorTasks(ma::TaskGraphBuilder &builder, 
                              const Sim::Config &cfg)
 {
-    //ma::render::RenderingSystem::setupTasks(builder, {});
-    auto nop_system = builder.addToGraph<ma::ParallelForNode<Engine,
-         nopSystem,
-            ma::Entity
-        >>({});
+    // This task graph is also going to perform the tracing
+    ma::render::RenderingSystem::setupTasks(builder, {});
 }
 
 // Build the task graph
