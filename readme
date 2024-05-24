@@ -14,3 +14,7 @@ In the root directory of the project, create a venv:
 python -m venv botenv
 pip install -e .
 ```
+
+## TODO
+
+- Create chunk system to create the smell and sound sensors

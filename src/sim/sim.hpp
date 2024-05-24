@@ -32,6 +32,9 @@ struct Sim : ma::WorldBase {
     struct Config {
         uint32_t numAgentsPerWorld;
         ma::RandKey initRandKey;
+
+        uint32_t numChunksX;
+        uint32_t numChunksY;
     };
 
     // Per-world configuration - not needed for now.
@@ -70,6 +73,11 @@ struct Sim : ma::WorldBase {
 
     // Number of agents in this world.
     uint32_t numAgents;
+
+    uint32_t numChunksX;
+    uint32_t numChunksY;
+
+    ma::Loc chunksLoc;
 };
 
 class Engine : public ::ma::CustomContext<Engine, Sim> {

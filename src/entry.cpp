@@ -26,21 +26,5 @@ NB_MODULE(madrona_bots, m) {
            nb::arg("num_worlds"),
            nb::arg("rand_seed"))
         .def("step", &Manager::step)
-#if 0
-        .def("reset_tensor", &Manager::resetTensor)
-        .def("action_tensor", &Manager::actionTensor)
-        .def("reward_tensor", &Manager::rewardTensor)
-        .def("done_tensor", &Manager::doneTensor)
-        .def("self_observation_tensor", &Manager::selfObservationTensor)
-        .def("partner_observations_tensor", &Manager::partnerObservationsTensor)
-        .def("room_entity_observations_tensor",
-             &Manager::roomEntityObservationsTensor)
-        .def("door_observation_tensor",
-             &Manager::doorObservationTensor)
-        .def("lidar_tensor", &Manager::lidarTensor)
-        .def("steps_remaining_tensor", &Manager::stepsRemainingTensor)
-        .def("rgb_tensor", &Manager::rgbTensor)
-        .def("depth_tensor", &Manager::depthTensor)
-#endif
     ;
 }

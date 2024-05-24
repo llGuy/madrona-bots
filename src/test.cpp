@@ -8,7 +8,7 @@ int main(int argc, char **argv)
 
     Manager::Config cfg = {
         .gpuID = 0,
-        .numWorlds = 1,
+        .numWorlds = 2,
         .randSeed = 0,
         .sensorSize = 32,
         .numAgentsPerWorld = 2,
@@ -36,10 +36,10 @@ int main(int argc, char **argv)
         printf("\n");
     };
 
-    for (int i = 0; i < 128; ++i) {
+    for (int i = 0; i < 4; ++i) {
         mgr.step();
 
-        viz_sensor(0);
+        // viz_sensor(0);
     }
 
     return 0;

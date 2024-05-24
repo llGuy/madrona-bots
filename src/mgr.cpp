@@ -1,5 +1,5 @@
 #include "mgr.hpp"
-#include "sim.hpp"
+#include "sim/sim.hpp"
 
 #include <vector>
 #include <random>
@@ -68,7 +68,9 @@ Manager::Impl *Manager::Impl::make(const Config &mgr_cfg)
     // Initialize the GPU executor and launch graphs
     mbots::Sim::Config sim_cfg = {
         .numAgentsPerWorld = mgr_cfg.numAgentsPerWorld,
-        .initRandKey = ma::rand::initKey(mgr_cfg.randSeed)
+        .initRandKey = ma::rand::initKey(mgr_cfg.randSeed),
+        .numChunksX = 2,
+        .numChunksY = 2
     };
 
 

@@ -1,6 +1,6 @@
 set(SIMULATOR_SRCS
-    sim.hpp
-    sim.cpp
+    sim/sim.hpp
+    sim/sim.cpp
 )
 
 add_library(madrona_bots_mgr STATIC

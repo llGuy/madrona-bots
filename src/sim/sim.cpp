@@ -1,4 +1,5 @@
 #include <algorithm>
+
 #include <madrona/mw_gpu_entry.hpp>
 
 #include "sim.hpp"
@@ -27,10 +28,14 @@ void Sim::registerTypes(ma::ECSRegistry &registry, const Config &cfg)
     registry.registerComponent<Reward>();
     registry.registerComponent<Done>();
     registry.registerComponent<AgentType>();
+    registry.registerComponent<ChunkInfo>();
+    registry.registerComponent<ChunkData>();
 
     registry.registerSingleton<WorldReset>();
 
     registry.registerArchetype<Agent>();
+    registry.registerArchetype<ChunkInfoArchetype>();
+    registry.registerArchetype<ChunkDataArchetype>();
 
     registry.exportSingleton<WorldReset>(
         (uint32_t)ExportID::Reset);
@@ -45,7 +50,9 @@ void Sim::registerTypes(ma::ECSRegistry &registry, const Config &cfg)
             (uint32_t)ExportID::Sensor);
 }
 
-static inline void initWorld(Engine &ctx)
+static inline void initWorld(Engine &ctx,
+                             uint32_t num_chunks_x,
+                             uint32_t num_chunks_y)
 {
     for (int i = 0; i < ctx.data().numAgents; ++i) {
         auto entity = ctx.makeRenderableEntity<Agent>();
@@ -70,11 +77,23 @@ static inline void initWorld(Engine &ctx)
         ctx.get<AgentType>(entity) = (i == 0) ?
             AgentType::Herbivore : AgentType::Carnivore;
     }
+
+    ma::Loc loc = ctx.makeStationary<ChunkInfoArchetype>(num_chunks_x * num_chunks_y);
+
+    ctx.data().chunksLoc = loc;
 }
 
 inline void resetSystem(Engine &ctx, WorldReset &reset)
 {
     // TODO: Implement world resetting
+}
+
+inline void resetChunkInfoSystem(Engine &ctx,
+                                 ChunkInfo &chunk_info)
+{
+    LOG("ResetChunkInfoSystem: WorldID={}\n", ctx.worldID().idx);
+    chunk_info.numAgents.store_relaxed(0);
+    chunk_info.totalSpeed.store_relaxed(0.0f);
 }
 
 inline void actionSystem(Engine &ctx,
@@ -118,6 +137,13 @@ ma::TaskGraph::NodeID queueSortByWorld(ma::TaskGraph::Builder &builder,
 static void setupStepTasks(ma::TaskGraphBuilder &builder, 
                            const Sim::Config &cfg)
 {
+    // Reset the information that tracks the number of agents / movement
+    // happening within a chunk
+    auto reset_chunk_info = builder.addToGraph<ma::ParallelForNode<Engine,
+        resetChunkInfoSystem,
+            ChunkInfo
+        >>({});
+
     // Turn policy actions into movement
     auto action_sys = builder.addToGraph<ma::ParallelForNode<Engine,
         actionSystem,
@@ -126,7 +152,7 @@ static void setupStepTasks(ma::TaskGraphBuilder &builder,
             ma::base::Position,
             AgentType,
             Action,
-        >>({});
+        >>({reset_chunk_info});
 
     // Conditionally reset the world if the episode is over
     auto reward_sys = builder.addToGraph<ma::ParallelForNode<Engine,
@@ -167,9 +193,11 @@ Sim::Sim(Engine &ctx,
       rng(ma::rand::split_i(initRandKey, curWorldEpisode++,
                             (uint32_t)ctx.worldID().idx)),
       autoReset(false),
-      numAgents(cfg.numAgentsPerWorld)
+      numAgents(cfg.numAgentsPerWorld),
+      numChunksX(cfg.numChunksX),
+      numChunksY(cfg.numChunksY)
 {
-    initWorld(ctx);
+    initWorld(ctx, numChunksX, numChunksY);
 
     // Initialize state required for the raytracing
     ma::render::RenderingSystem::init(ctx, nullptr);
