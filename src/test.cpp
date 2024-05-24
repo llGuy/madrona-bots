@@ -3,6 +3,9 @@
 
 int main(int argc, char **argv)
 {
+    (void)argc;
+    (void)argv;
+
     Manager::Config cfg = {
         .gpuID = 0,
         .numWorlds = 1,
@@ -16,7 +19,7 @@ int main(int argc, char **argv)
 
 
     // Just visualizes the first world's agents' sensor
-    auto viz_sensor = [&mgr, &cfg] (uint32_t agent_idx) {
+    [[maybe_unused]] auto viz_sensor = [&mgr, &cfg] (uint32_t agent_idx) {
         int64_t num_bytes = cfg.sensorSize;
         uint8_t *print_ptr = (uint8_t *)ma::cu::allocReadback(num_bytes);
 
@@ -26,14 +29,14 @@ int main(int argc, char **argv)
                 num_bytes,
                 cudaMemcpyDeviceToHost);
 
-        for (int i = 0; i < cfg.sensorSize; ++i) {
+        for (int i = 0; i < (int)cfg.sensorSize; ++i) {
             printf("%u  ", print_ptr[i]);
         }
 
         printf("\n");
     };
 
-    for (int i = 0; i < 32; ++i) {
+    for (int i = 0; i < 128; ++i) {
         mgr.step();
 
         viz_sensor(0);

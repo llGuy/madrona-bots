@@ -29,6 +29,12 @@ struct Done {
     int32_t v;
 };
 
+enum class AgentType {
+    Herbivore,
+    Carnivore,
+    NumAgentTypes
+};
+
 
 struct Agent : ma::Archetype<
     // Basic components required for physics. Note that the current physics
@@ -38,6 +44,11 @@ struct Agent : ma::Archetype<
     ma::base::Rotation,
     ma::base::Scale,
     ma::base::ObjectID,
+
+
+    // Properties
+    AgentType,
+
  
     // Input
     Action,

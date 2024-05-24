@@ -26,6 +26,7 @@ void Sim::registerTypes(ma::ECSRegistry &registry, const Config &cfg)
     registry.registerComponent<Action>();
     registry.registerComponent<Reward>();
     registry.registerComponent<Done>();
+    registry.registerComponent<AgentType>();
 
     registry.registerSingleton<WorldReset>();
 
@@ -65,6 +66,9 @@ static inline void initWorld(Engine &ctx)
         // for it.
         ma::render::RenderingSystem::attachEntityToView(
             ctx, entity, 90.f, 0.1f, { 0.f, 0.f, 0.f });
+
+        ctx.get<AgentType>(entity) = (i == 0) ?
+            AgentType::Herbivore : AgentType::Carnivore;
     }
 }
 
@@ -77,10 +81,14 @@ inline void actionSystem(Engine &ctx,
                          ma::Entity e,
                          ma::base::Rotation &rot,
                          ma::base::Position &pos,
+                         AgentType agent_type,
                          Action &action)
 {
     // For now, the action is just going to rotate the entities.
-    rot *= ma::math::Quat::angleAxis(0.1f, ma::math::Vector3{ 0.f, 0.f, 1.f });
+    if (agent_type == AgentType::Herbivore) {
+        rot *= ma::math::Quat::angleAxis(
+                0.1f, ma::math::Vector3{ 0.f, 0.f, 1.f });
+    }
 }
 
 inline void rewardSystem(Engine &,
@@ -116,6 +124,7 @@ static void setupStepTasks(ma::TaskGraphBuilder &builder,
             ma::Entity,
             ma::base::Rotation,
             ma::base::Position,
+            AgentType,
             Action,
         >>({});
 
