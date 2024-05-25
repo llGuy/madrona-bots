@@ -78,7 +78,15 @@ struct SurroundingObservation {
     float movementHeuristic;
 };
 
-using Health = float;
+struct Health {
+    int32_t v;
+};
+
+// We need to separate out the Health and HealthAccumulator for concurrency
+// reasons.
+struct HealthAccumulator {
+    ma::AtomicI32 v;
+};
 
 struct Agent : ma::Archetype<
     ma::base::Position,
@@ -90,6 +98,7 @@ struct Agent : ma::Archetype<
     // Properties
     AgentType,
     Health,
+    HealthAccumulator,
 
  
     // Input

@@ -33,6 +33,7 @@ void Sim::registerTypes(ma::ECSRegistry &registry, const Config &cfg)
     registry.registerComponent<ChunkData>();
     registry.registerComponent<SurroundingObservation>();
     registry.registerComponent<Health>();
+    registry.registerComponent<HealthAccumulator>();
 
     registry.registerSingleton<WorldReset>();
 
@@ -80,7 +81,8 @@ static inline void initWorld(Engine &ctx,
         ctx.get<AgentType>(entity) = (i == 0) ?
             AgentType::Herbivore : AgentType::Carnivore;
 
-        ctx.get<Health>(entity) = 100.f;
+        ctx.get<Health>(entity).v = 100;
+        ctx.get<HealthAccumulator>(entity).v.store_relaxed(100);
     }
 
     ma::Loc loc = ctx.makeStationary<ChunkInfoArchetype>(num_chunks_x * num_chunks_y);
@@ -119,10 +121,11 @@ inline void actionSystem(Engine &ctx,
                 ma::render::FinderOutputBuffer>(
                         ctx, camera, sizeof(ma::render::FinderOutput));
 
-        LOG("Shooting at entity: gen={}, id={}, depth={}\n",
-            finder_output->hitEntity.gen,
-            finder_output->hitEntity.id,
-            finder_output->depth);
+        if (finder_output->hitEntity != ma::Entity::none()) {
+            // Each hit leads to -10 health damage.
+            ctx.get<HealthAccumulator>(finder_output->hitEntity).v.
+                fetch_add_relaxed(-10);
+        }
     }
 
     if (action.rotate) {
@@ -168,6 +171,24 @@ inline void actionSystem(Engine &ctx,
     // Increment the number of agents there are in this chunk.
     chunk_info->numAgents.fetch_add_relaxed(1);
     chunk_info->totalSpeed.fetch_add_relaxed((uint32_t)(delta_pos_len*2.f));
+}
+
+inline void healthSync(Engine &ctx,
+                       ma::Entity e,
+                       Health &health,
+                       HealthAccumulator &health_accum)
+{
+    health.v = health_accum.v.load_relaxed();
+
+    LOG("Entity({},{}) has health {}\n", e.gen, e.id, health.v);
+
+    if (health.v <= 0) {
+        // Destroy myself!
+        ma::render::RenderingSystem::cleanupViewingEntity(ctx, e);
+        ctx.destroyRenderableEntity(e);
+
+        LOG("Entity({}, {}) has been destroyed!\n", e.gen, e.id);
+    }
 }
 
 inline void updateSurroundingObservation(Engine &ctx,
@@ -288,13 +309,20 @@ static void setupStepTasks(ma::TaskGraphBuilder &builder,
             ma::render::RenderCamera
         >>({reset_chunk_info});
 
+    auto health_sync_sys = builder.addToGraph<ma::ParallelForNode<Engine,
+        healthSync,
+            ma::Entity,
+            Health,
+            HealthAccumulator,
+        >>({action_sys});
+
     auto update_surrounding_obs_sys = builder.addToGraph<ma::ParallelForNode<Engine,
          updateSurroundingObservation,
             ma::Entity,
             ma::base::Position,
             AgentType,
             SurroundingObservation
-         >>({action_sys});
+         >>({health_sync_sys});
 
     // Conditionally reset the world if the episode is over
     auto reward_sys = builder.addToGraph<ma::ParallelForNode<Engine,
