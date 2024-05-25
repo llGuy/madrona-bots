@@ -1,6 +1,5 @@
 #include "mgr.hpp"
 #include <stdio.h>
-#include <curses.h>
 
 int main(int argc, char **argv)
 {
@@ -9,7 +8,7 @@ int main(int argc, char **argv)
 
     Manager::Config cfg = {
         .gpuID = 0,
-        .numWorlds = 2,
+        .numWorlds = 1,
         .randSeed = 0,
         .sensorSize = 32,
         .numAgentsPerWorld = 2,
@@ -37,19 +36,49 @@ int main(int argc, char **argv)
         printf("\n");
     };
 
+    char action_desc_buffer[256];
+
     while (true) {
-        int ch = getch();
+        if (!fgets(action_desc_buffer, sizeof(action_desc_buffer), stdin)) {
+            // There was a problem
+            break;
+        }
 
-        printf("%c\n", ch);
+        for (int i = 0; i < (int)strlen(action_desc_buffer)-1; ++i) {
+            char act = action_desc_buffer[i];
+
+            int32_t forward = 0, backward = 0, rotate = 0, shoot = 0;
+
+            switch (act) {
+            case 'f': {
+                forward = 1;
+            } break;
+
+            case 'b': {
+                backward = 1;
+            } break;
+
+            case 'r': {
+                rotate = 1;
+            } break;
+
+            case 's': {
+                shoot = 1;
+            } break;
+
+            default: {
+            } break;
+            }
+
+            mgr.setAction(0, forward, backward, rotate, shoot);
+
+            mgr.step();
+
+            viz_sensor(0);
+        }
+
+        memset(action_desc_buffer, 0, sizeof(action_desc_buffer));
     }
-
-#if 0
-    for (int i = 0; i < 4; ++i) {
-        mgr.step();
-
-        // viz_sensor(0);
-    }
-#endif
 
     return 0;
 }

@@ -94,9 +94,6 @@ inline void resetChunkInfoSystem(Engine &ctx,
 {
     uint32_t num_agents = chunk_info.numAgents.load_relaxed();
 
-    LOG("ResetChunkInfoSystem: WorldID={}, has {} agents\n", 
-        ctx.worldID().idx,
-        num_agents);
     chunk_info.numAgents.store_relaxed(0);
     chunk_info.totalSpeed.store_relaxed(0.0f);
 }
@@ -108,6 +105,9 @@ inline void actionSystem(Engine &ctx,
                          AgentType agent_type,
                          Action &action)
 {
+    LOG("Got action: forward={} backward={} rotate={} shoot={}\n",
+        action.forward, action.backward, action.rotate, action.shoot);
+
     // For now, the action is just going to rotate the entities.
     if (agent_type == AgentType::Herbivore) {
         rot *= ma::math::Quat::angleAxis(
