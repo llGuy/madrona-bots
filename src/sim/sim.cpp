@@ -32,6 +32,7 @@ void Sim::registerTypes(ma::ECSRegistry &registry, const Config &cfg)
     registry.registerComponent<ChunkInfo>();
     registry.registerComponent<ChunkData>();
     registry.registerComponent<SurroundingObservation>();
+    registry.registerComponent<Health>();
 
     registry.registerSingleton<WorldReset>();
 
@@ -78,6 +79,8 @@ static inline void initWorld(Engine &ctx,
 
         ctx.get<AgentType>(entity) = (i == 0) ?
             AgentType::Herbivore : AgentType::Carnivore;
+
+        ctx.get<Health>(entity) = 100.f;
     }
 
     ma::Loc loc = ctx.makeStationary<ChunkInfoArchetype>(num_chunks_x * num_chunks_y);
@@ -124,6 +127,17 @@ inline void actionSystem(Engine &ctx,
         pos -= view_dir;
     }
 
+    // Make sure to clamp the position to the world boundaries
+    const float kWorldLimitX = ctx.data().cellDim * 
+                               (float)ChunkData::kChunkWidth *
+                               (float)ctx.data().numChunksX;
+    const float kWorldLimitY = ctx.data().cellDim * 
+                               (float)ChunkData::kChunkWidth *
+                               (float)ctx.data().numChunksY;
+
+    pos.x = std::min(kWorldLimitX, std::max(0.f, pos.x));
+    pos.y = std::min(kWorldLimitY, std::max(0.f, pos.y));
+
     ma::math::Vector3 delta_pos = pos - old_pos;
     float delta_pos_len = delta_pos.length();
 
@@ -148,7 +162,7 @@ inline void updateSurroundingObservation(Engine &ctx,
 {
     ma::math::Vector2 cell_pos = pos.xy() / ctx.data().cellDim;
     cell_pos -= ma::math::Vector2{ (float)ChunkData::kChunkWidth * 0.5f,
-                                   (float)ChunkData::kChunkWidth * 0.5f }
+                                   (float)ChunkData::kChunkWidth * 0.5f };
     ma::math::Vector2 chcoord = cell_pos / (float)ChunkData::kChunkWidth;
 
     // These are the coordinates of the chunks with centroids which
@@ -194,14 +208,14 @@ inline void updateSurroundingObservation(Engine &ctx,
           total_speed11 = (chinfo11 ? (float)chinfo11->totalSpeed.load_relaxed() : 0.f);
 
     float num_agents_x_0 = x_interpolant * num_agents10 + 
-                           (1.f - x_interpolated) * num_agents00;
+                           (1.f - x_interpolant) * num_agents00;
     float num_agents_x_1 = x_interpolant * num_agents11 + 
-                           (1.f - x_interpolated) * num_agents01;
+                           (1.f - x_interpolant) * num_agents01;
 
     float total_speed_x_0 = x_interpolant * total_speed10 + 
-                           (1.f - x_interpolated) * total_speed00;
+                           (1.f - x_interpolant) * total_speed00;
     float total_speed_x_1 = x_interpolant * total_speed11 + 
-                           (1.f - x_interpolated) * total_speed01;
+                           (1.f - x_interpolant) * total_speed01;
 
     float num_agents_interpolated = y_interpolant * num_agents_x_1 +
                                     (1.f - y_interpolant) * num_agents_x_0;

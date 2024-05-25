@@ -78,6 +78,8 @@ struct SurroundingObservation {
     float movementHeuristic;
 };
 
+using Health = float;
+
 struct Agent : ma::Archetype<
     ma::base::Position,
     ma::base::Rotation,
@@ -87,6 +89,7 @@ struct Agent : ma::Archetype<
 
     // Properties
     AgentType,
+    Health,
 
  
     // Input

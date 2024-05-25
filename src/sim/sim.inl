@@ -50,7 +50,7 @@ inline ChunkInfo *Sim::getChunkInfo(Engine &ctx, int32_t chunk_idx)
 
     ma::Loc loc = chunksLoc;
     loc.row += chunk_idx;
-    return ctx.get<ChunkInfo>(loc);
+    return &ctx.get<ChunkInfo>(loc);
 }
 
 }
