@@ -26,6 +26,8 @@ struct Manager::Impl {
     ma::MWCudaLaunchGraph stepGraph;
     ma::MWCudaLaunchGraph sensorGraph;
 
+    mbots::Action *actionBuffer;
+
 
 
     static Impl *make(const Manager::Config &cfg);
@@ -33,7 +35,8 @@ struct Manager::Impl {
     Impl(const Manager::Config &mgr_cfg,
          ma::MWCudaExecutor &&exec,
          ma::MWCudaLaunchGraph &&step,
-         ma::MWCudaLaunchGraph &&sensor);
+         ma::MWCudaLaunchGraph &&sensor,
+         mbots::Action *action_buffer);
 
     ~Impl();
 
@@ -55,11 +58,13 @@ struct Manager::Impl {
 Manager::Impl::Impl(const Config &mgr_cfg,
                     ma::MWCudaExecutor &&exec,
                     ma::MWCudaLaunchGraph &&step,
-                    ma::MWCudaLaunchGraph &&sensor)
+                    ma::MWCudaLaunchGraph &&sensor,
+                    mbots::Action *action_buffer)
     : cfg(cfg),
       gpuExec(std::move(exec)),
       stepGraph(std::move(step)),
-      sensorGraph(std::move(sensor))
+      sensorGraph(std::move(sensor)),
+      actionBuffer(action_buffer)
 {
 }
 
@@ -110,10 +115,14 @@ Manager::Impl *Manager::Impl::make(const Config &mgr_cfg)
     ma::MWCudaLaunchGraph sensor_graph = gpu_exec.buildLaunchGraph(
             mbots::TaskGraphID::Sensor, true);
 
+    mbots::Action *action_buffer = (mbots::Action *)
+        gpu_exec.getExported((uint32_t)mbots::ExportID::Action);
+
     return new Impl(mgr_cfg, 
                     std::move(gpu_exec),
                     std::move(step_graph),
-                    std::move(sensor_graph));
+                    std::move(sensor_graph),
+                    action_buffer);
 }
 
 Manager::Impl::~Impl()
@@ -146,4 +155,24 @@ ma::py::Tensor Manager::sensorTensor() const
                                         impl_->cfg.numAgentsPerWorld,
                                    pixels_per_view,
                                });
+}
+
+
+void Manager::setAction(uint32_t agent_idx,
+                        int32_t forward,
+                        int32_t backward,
+                        int32_t rotate,
+                        int32_t shoot)
+{
+    mbots::Action action = {
+        .forward = forward,
+        .backward = backward,
+        .rotate = rotate,
+        .shoot = shoot
+    };
+
+    auto *action_ptr = impl_->actionBuffer + agent_idx;
+
+    cudaMemcpy(action_ptr, &action, sizeof(mbots::Action),
+                cudaMemcpyHostToDevice);
 }

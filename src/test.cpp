@@ -1,5 +1,6 @@
 #include "mgr.hpp"
 #include <stdio.h>
+#include <curses.h>
 
 int main(int argc, char **argv)
 {
@@ -36,11 +37,19 @@ int main(int argc, char **argv)
         printf("\n");
     };
 
+    while (true) {
+        int ch = getch();
+
+        printf("%c\n", ch);
+    }
+
+#if 0
     for (int i = 0; i < 4; ++i) {
         mgr.step();
 
         // viz_sensor(0);
     }
+#endif
 
     return 0;
 }

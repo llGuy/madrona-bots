@@ -21,6 +21,12 @@ public:
 
     ma::py::Tensor sensorTensor() const;
 
+    void setAction(uint32_t agent_idx,
+                   int32_t forward,
+                   int32_t backward,
+                   int32_t rotate,
+                   int32_t shoot);
+
 private:
     struct Impl;
 
