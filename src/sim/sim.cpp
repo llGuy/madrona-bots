@@ -31,6 +31,7 @@ void Sim::registerTypes(ma::ECSRegistry &registry, const Config &cfg)
     registry.registerComponent<AgentType>();
     registry.registerComponent<ChunkInfo>();
     registry.registerComponent<ChunkData>();
+    registry.registerComponent<SurroundingObservation>();
 
     registry.registerSingleton<WorldReset>();
 
@@ -105,24 +106,111 @@ inline void actionSystem(Engine &ctx,
                          AgentType agent_type,
                          Action &action)
 {
-    LOG("Got action: forward={} backward={} rotate={} shoot={}\n",
-        action.forward, action.backward, action.rotate, action.shoot);
-
-    // For now, the action is just going to rotate the entities.
-    if (agent_type == AgentType::Herbivore) {
+    if (action.rotate) {
         rot *= ma::math::Quat::angleAxis(
                 0.1f, ma::math::Vector3{ 0.f, 0.f, 1.f });
     }
+
+    ma::math::Vector3 old_pos = pos;
+
+    ma::math::Vector3 view_dir = 
+        rot.rotateVec(ma::math::Vector3{1.f, 0.f, 0.f});
+    view_dir = view_dir.normalize();
+
+    if (action.forward) {
+        // Get the view direction
+        pos += view_dir;
+    } else if (action.backward) {
+        pos -= view_dir;
+    }
+
+    ma::math::Vector3 delta_pos = pos - old_pos;
+    float delta_pos_len = delta_pos.length();
 
     // Update the chunk data for the chunk that this agent affects
     ma::math::Vector2 chunk_coord = ctx.data().getChunkCoord(pos.xy());
     int32_t chunk_idx = ctx.data().getChunkIndex(chunk_coord);
 
     assert(chunk_idx != -1);
-    ChunkInfo &chunk_info = ctx.data().getChunkInfo(ctx, chunk_idx);
+
+    ChunkInfo *chunk_info = ctx.data().getChunkInfo(ctx, chunk_idx);
 
     // Increment the number of agents there are in this chunk.
-    chunk_info.numAgents.fetch_add_relaxed(1);
+    chunk_info->numAgents.fetch_add_relaxed(1);
+    chunk_info->totalSpeed.fetch_add_relaxed((uint32_t)(delta_pos_len*2.f));
+}
+
+inline void updateSurroundingObservation(Engine &ctx,
+                                         ma::Entity e,
+                                         ma::base::Position &pos,
+                                         AgentType agent_type,
+                                         SurroundingObservation &surroundings)
+{
+    ma::math::Vector2 cell_pos = pos.xy() / ctx.data().cellDim;
+    cell_pos -= ma::math::Vector2{ (float)ChunkData::kChunkWidth * 0.5f,
+                                   (float)ChunkData::kChunkWidth * 0.5f }
+    ma::math::Vector2 chcoord = cell_pos / (float)ChunkData::kChunkWidth;
+
+    // These are the coordinates of the chunks with centroids which
+    // surround this agent.
+    ma::math::Vector2 chcoord00,
+                      chcoord10,
+                      chcoord01,
+                      chcoord11;
+
+    chcoord00.x = std::floor(chcoord.x);
+    chcoord00.y = std::floor(chcoord.y);
+
+    chcoord10.x = std::ceil(chcoord.x);
+    chcoord10.y = std::floor(chcoord.y);
+
+    chcoord01.x = std::floor(chcoord.x);
+    chcoord01.y = std::ceil(chcoord.y);
+
+    chcoord11.x = std::ceil(chcoord.x);
+    chcoord11.y = std::ceil(chcoord.y);
+
+    int32_t chindex00 = ctx.data().getChunkIndex(chcoord00),
+            chindex10 = ctx.data().getChunkIndex(chcoord10),
+            chindex01 = ctx.data().getChunkIndex(chcoord01),
+            chindex11 = ctx.data().getChunkIndex(chcoord11);
+
+    float x_interpolant = chcoord.x - chcoord00.x;
+    float y_interpolant = chcoord.y - chcoord00.y;
+
+    ChunkInfo *chinfo00 = ctx.data().getChunkInfo(ctx, chindex00),
+              *chinfo10 = ctx.data().getChunkInfo(ctx, chindex10),
+              *chinfo01 = ctx.data().getChunkInfo(ctx, chindex01),
+              *chinfo11 = ctx.data().getChunkInfo(ctx, chindex11);
+
+    float num_agents00 = (chinfo00 ? (float)chinfo00->numAgents.load_relaxed() : 0.f),
+          num_agents10 = (chinfo10 ? (float)chinfo10->numAgents.load_relaxed() : 0.f),
+          num_agents01 = (chinfo01 ? (float)chinfo01->numAgents.load_relaxed() : 0.f),
+          num_agents11 = (chinfo11 ? (float)chinfo11->numAgents.load_relaxed() : 0.f);
+
+    float total_speed00 = (chinfo00 ? (float)chinfo00->totalSpeed.load_relaxed() : 0.f),
+          total_speed10 = (chinfo10 ? (float)chinfo10->totalSpeed.load_relaxed() : 0.f),
+          total_speed01 = (chinfo01 ? (float)chinfo01->totalSpeed.load_relaxed() : 0.f),
+          total_speed11 = (chinfo11 ? (float)chinfo11->totalSpeed.load_relaxed() : 0.f);
+
+    float num_agents_x_0 = x_interpolant * num_agents10 + 
+                           (1.f - x_interpolated) * num_agents00;
+    float num_agents_x_1 = x_interpolant * num_agents11 + 
+                           (1.f - x_interpolated) * num_agents01;
+
+    float total_speed_x_0 = x_interpolant * total_speed10 + 
+                           (1.f - x_interpolated) * total_speed00;
+    float total_speed_x_1 = x_interpolant * total_speed11 + 
+                           (1.f - x_interpolated) * total_speed01;
+
+    float num_agents_interpolated = y_interpolant * num_agents_x_1 +
+                                    (1.f - y_interpolant) * num_agents_x_0;
+
+    float total_speed_interpolated = y_interpolant * total_speed_x_1 +
+                                    (1.f - y_interpolant) * total_speed_x_0;
+
+    surroundings.presenceHeuristic = num_agents_interpolated;
+    surroundings.movementHeuristic = total_speed_interpolated;
 }
 
 inline void rewardSystem(Engine &,
@@ -169,12 +257,20 @@ static void setupStepTasks(ma::TaskGraphBuilder &builder,
             Action,
         >>({reset_chunk_info});
 
+    auto update_surrounding_obs_sys = builder.addToGraph<ma::ParallelForNode<Engine,
+         updateSurroundingObservation,
+            ma::Entity,
+            ma::base::Position,
+            AgentType,
+            SurroundingObservation
+         >>({action_sys});
+
     // Conditionally reset the world if the episode is over
     auto reward_sys = builder.addToGraph<ma::ParallelForNode<Engine,
         rewardSystem,
             ma::base::Position,
             Reward
-        >>({action_sys});
+        >>({update_surrounding_obs_sys});
 
     // Required
     auto clear_tmp = builder.addToGraph<ma::ResetTmpAllocNode>({reward_sys});

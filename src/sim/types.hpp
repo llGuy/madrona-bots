@@ -43,7 +43,9 @@ enum class AgentType {
 // near any given point.
 struct ChunkInfo {
     ma::AtomicU32 numAgents;
-    ma::AtomicFloat totalSpeed;
+
+    // This isn't exactly speed, but some heuristic for speed
+    ma::AtomicU32 totalSpeed;
 
     // This entity points to a ChunkData archetype. We create this indirection
     // for potential memory saving. It also makes it so that we don't have to
@@ -68,6 +70,14 @@ struct ChunkDataArchetype : ma::Archetype<
     ChunkData
 > {};
 
+struct SurroundingObservation {
+    // Heuristic for measuring how many agents are around me
+    float presenceHeuristic;
+
+    // Heuristic for measuring how much movement is happening around me
+    float movementHeuristic;
+};
+
 struct Agent : ma::Archetype<
     ma::base::Position,
     ma::base::Rotation,
@@ -84,6 +94,7 @@ struct Agent : ma::Archetype<
  
 
     // TODO: Observations
+    SurroundingObservation,
 
  
     // Reward, episode termination

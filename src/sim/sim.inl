@@ -42,8 +42,12 @@ inline int32_t Sim::getChunkIndex(
 }
 
 
-inline ChunkInfo &Sim::getChunkInfo(Engine &ctx, int32_t chunk_idx)
+inline ChunkInfo *Sim::getChunkInfo(Engine &ctx, int32_t chunk_idx)
 {
+    if (chunk_idx == -1) {
+        return nullptr;
+    }
+
     ma::Loc loc = chunksLoc;
     loc.row += chunk_idx;
     return ctx.get<ChunkInfo>(loc);

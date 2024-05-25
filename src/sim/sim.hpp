@@ -69,7 +69,7 @@ struct Sim : ma::WorldBase {
     inline int32_t getChunkIndex(
             const ma::math::Vector2 &chunk_coord);
 
-    inline ChunkInfo &getChunkInfo(Engine &ctx, int32_t chunk_idx);
+    inline ChunkInfo *getChunkInfo(Engine &ctx, int32_t chunk_idx);
 
 
 
