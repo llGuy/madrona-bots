@@ -107,8 +107,24 @@ inline void actionSystem(Engine &ctx,
                          ma::base::Rotation &rot,
                          ma::base::Position &pos,
                          AgentType agent_type,
-                         Action &action)
+                         Action &action,
+                         ma::render::RenderCamera &camera)
 {
+    // First perform the shoot action if needed - we use the contents of the
+    // previous frame from the raycasting output.
+    if (action.shoot) {
+        ma::render::FinderOutput *finder_output = 
+            (ma::render::FinderOutput *)
+                ma::render::RenderingSystem::getRenderOutput<
+                ma::render::FinderOutputBuffer>(
+                        ctx, camera, sizeof(ma::render::FinderOutput));
+
+        LOG("Shooting at entity: gen={}, id={}, depth={}\n",
+            finder_output->hitEntity.gen,
+            finder_output->hitEntity.id,
+            finder_output->depth);
+    }
+
     if (action.rotate) {
         rot *= ma::math::Quat::angleAxis(
                 0.1f, ma::math::Vector3{ 0.f, 0.f, 1.f });
@@ -269,6 +285,7 @@ static void setupStepTasks(ma::TaskGraphBuilder &builder,
             ma::base::Position,
             AgentType,
             Action,
+            ma::render::RenderCamera
         >>({reset_chunk_info});
 
     auto update_surrounding_obs_sys = builder.addToGraph<ma::ParallelForNode<Engine,
