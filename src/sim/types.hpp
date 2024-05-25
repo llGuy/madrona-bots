@@ -57,7 +57,7 @@ struct ChunkInfoArchetype : ma::Archetype<
 > {};
 
 struct ChunkData {
-    // Each chunk is 16 meters wide.
+    // Each chunk is 16 cells wide.
     static constexpr uint32_t kChunkWidth = 16;
 
     // Contains food data (or whatever other data we might need to store).

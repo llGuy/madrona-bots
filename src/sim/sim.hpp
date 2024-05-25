@@ -1,5 +1,8 @@
 #pragma once
 
+#include "types.hpp"
+
+#include <cmath>
 #include <madrona/rand.hpp>
 #include <madrona/render/ecs.hpp>
 #include <madrona/custom_context.hpp>
@@ -35,6 +38,8 @@ struct Sim : ma::WorldBase {
 
         uint32_t numChunksX;
         uint32_t numChunksY;
+
+        float cellDim;
     };
 
     // Per-world configuration - not needed for now.
@@ -58,6 +63,14 @@ struct Sim : ma::WorldBase {
         const Config &cfg,
         const WorldInit &);
 
+    inline ma::math::Vector2 getChunkCoord(
+            const ma::math::Vector2 &world_pos);
+
+    inline int32_t getChunkIndex(
+            const ma::math::Vector2 &chunk_coord);
+
+    inline ChunkInfo &getChunkInfo(Engine &ctx, int32_t chunk_idx);
+
 
 
     uint32_t curWorldEpisode;
@@ -76,6 +89,10 @@ struct Sim : ma::WorldBase {
 
     uint32_t numChunksX;
     uint32_t numChunksY;
+
+    // How long the cell is in meters. A chunk is made up of 
+    // ChunkData::kChunkWidth x ChunkData::kChunkWidth cells.
+    float cellDim;
 
     ma::Loc chunksLoc;
 };

@@ -1,3 +1,4 @@
+#include <cmath>
 #include <algorithm>
 
 #include <madrona/mw_gpu_entry.hpp>
@@ -91,7 +92,11 @@ inline void resetSystem(Engine &ctx, WorldReset &reset)
 inline void resetChunkInfoSystem(Engine &ctx,
                                  ChunkInfo &chunk_info)
 {
-    LOG("ResetChunkInfoSystem: WorldID={}\n", ctx.worldID().idx);
+    uint32_t num_agents = chunk_info.numAgents.load_relaxed();
+
+    LOG("ResetChunkInfoSystem: WorldID={}, has {} agents\n", 
+        ctx.worldID().idx,
+        num_agents);
     chunk_info.numAgents.store_relaxed(0);
     chunk_info.totalSpeed.store_relaxed(0.0f);
 }
@@ -108,6 +113,16 @@ inline void actionSystem(Engine &ctx,
         rot *= ma::math::Quat::angleAxis(
                 0.1f, ma::math::Vector3{ 0.f, 0.f, 1.f });
     }
+
+    // Update the chunk data for the chunk that this agent affects
+    ma::math::Vector2 chunk_coord = ctx.data().getChunkCoord(pos.xy());
+    int32_t chunk_idx = ctx.data().getChunkIndex(chunk_coord);
+
+    assert(chunk_idx != -1);
+    ChunkInfo &chunk_info = ctx.data().getChunkInfo(ctx, chunk_idx);
+
+    // Increment the number of agents there are in this chunk.
+    chunk_info.numAgents.fetch_add_relaxed(1);
 }
 
 inline void rewardSystem(Engine &,
@@ -195,7 +210,8 @@ Sim::Sim(Engine &ctx,
       autoReset(false),
       numAgents(cfg.numAgentsPerWorld),
       numChunksX(cfg.numChunksX),
-      numChunksY(cfg.numChunksY)
+      numChunksY(cfg.numChunksY),
+      cellDim(cfg.cellDim)
 {
     initWorld(ctx, numChunksX, numChunksY);
 

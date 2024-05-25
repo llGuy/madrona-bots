@@ -70,7 +70,8 @@ Manager::Impl *Manager::Impl::make(const Config &mgr_cfg)
         .numAgentsPerWorld = mgr_cfg.numAgentsPerWorld,
         .initRandKey = ma::rand::initKey(mgr_cfg.randSeed),
         .numChunksX = 2,
-        .numChunksY = 2
+        .numChunksY = 2,
+        .cellDim = 1.f
     };
 
 
