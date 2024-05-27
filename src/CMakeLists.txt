@@ -1,10 +1,12 @@
+include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+
 set(SIMULATOR_SRCS
     sim/sim.hpp
     sim/sim.cpp
 )
 
 add_library(madrona_bots_mgr STATIC
-    mgr.cpp mgr.hpp
+    entry/mgr.cpp entry/mgr.hpp
 )
 
 target_link_libraries(madrona_bots_mgr
@@ -18,7 +20,6 @@ SET(MADRONA_BOTS_COMPILE_FLAGS
     -v)
 
 if (TARGET madrona_mw_gpu)
-    message(INFO "EMPTTTTTTTTTTTTTTYTYYYYYYYYYYYYYYY???")
     message(INFO ${SIMULATOR_SRCS})
 
     madrona_build_compile_defns(
@@ -43,7 +44,7 @@ else()
 endif()
 
 add_executable(madrona_bots_test
-    test.cpp
+    entry/test.cpp
 )
 
 target_link_libraries(madrona_bots_test PRIVATE
@@ -51,9 +52,22 @@ target_link_libraries(madrona_bots_test PRIVATE
 )
 
 madrona_python_module(madrona_bots
-    entry.cpp
+    entry/entry.cpp
 )
 
 target_link_libraries(madrona_bots PRIVATE
     madrona_bots_mgr
+)
+
+add_executable(madrona_bots_app
+    gfx/app.cpp
+    gfx/assets.cpp
+)
+
+target_link_libraries(madrona_bots_app PRIVATE
+    madrona_bots_mgr madrona_mw_core madrona_viz madrona_cuda stb
+)
+
+target_compile_definitions(madrona_bots_app PRIVATE
+    -DDATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../data/"
 )

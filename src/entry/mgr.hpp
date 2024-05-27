@@ -12,6 +12,9 @@ public:
         uint32_t randSeed; // Seed for random world gen
         uint32_t sensorSize; // Number of pixels in the sensor
         uint32_t numAgentsPerWorld;
+        
+        // If we are doing visualization
+        void *renderBridge = nullptr;
     };
 
     Manager(const Config &cfg);

@@ -76,7 +76,8 @@ Manager::Impl *Manager::Impl::make(const Config &mgr_cfg)
         .initRandKey = ma::rand::initKey(mgr_cfg.randSeed),
         .numChunksX = 2,
         .numChunksY = 2,
-        .cellDim = 1.f
+        .cellDim = 1.f,
+        .renderBridge = mgr_cfg.renderBridge
     };
 
 

@@ -30,6 +30,14 @@ enum class TaskGraphID : uint32_t {
     NumTaskGraphs,
 };
 
+enum class SimObject : uint32_t {
+    Agent,
+    Wall,
+    Food,
+    Plane,
+    NumObjects
+};
+
 struct Sim : ma::WorldBase {
     // Configuration struct for the simulation
     struct Config {
@@ -40,6 +48,8 @@ struct Sim : ma::WorldBase {
         uint32_t numChunksY;
 
         float cellDim;
+
+        void *renderBridge;
     };
 
     // Per-world configuration - not needed for now.

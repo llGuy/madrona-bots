@@ -23,7 +23,10 @@ void Sim::registerTypes(ma::ECSRegistry &registry, const Config &cfg)
 {
     ma::base::registerTypes(registry);
 
-    ma::render::RenderingSystem::registerTypes(registry, nullptr);
+    // The render bridge is going to hold something when running with the
+    // visualizer application.
+    ma::render::RenderingSystem::registerTypes(registry, 
+            (ma::render::RenderECSBridge *)cfg.renderBridge);
 
     registry.registerComponent<Action>();
     registry.registerComponent<Reward>();
@@ -63,7 +66,7 @@ static inline void initWorld(Engine &ctx,
 
         // Initialize the entities with some positions
         ctx.get<ma::base::Position>(entity) = ma::math::Vector3{
-            i * 10.f, 0.f, 0.f
+            i * 10.f, 0.f, 10.f
         };
 
         ctx.get<ma::base::Rotation>(entity) =
@@ -72,6 +75,8 @@ static inline void initWorld(Engine &ctx,
         ctx.get<ma::base::Scale>(entity) = ma::math::Diag3x3{
             1.f, 1.f, 1.f
         };
+
+        ctx.get<ma::base::ObjectID>(entity).idx = (int32_t)SimObject::Agent;
 
         // Attach a view to this entity so that sensor data gets generated
         // for it.
@@ -179,8 +184,6 @@ inline void healthSync(Engine &ctx,
                        HealthAccumulator &health_accum)
 {
     health.v = health_accum.v.load_relaxed();
-
-    LOG("Entity({},{}) has health {}\n", e.gen, e.id, health.v);
 
     if (health.v <= 0) {
         // Destroy myself!
@@ -371,7 +374,8 @@ Sim::Sim(Engine &ctx,
     initWorld(ctx, numChunksX, numChunksY);
 
     // Initialize state required for the raytracing
-    ma::render::RenderingSystem::init(ctx, nullptr);
+    ma::render::RenderingSystem::init(ctx,
+            (ma::render::RenderECSBridge *)cfg.renderBridge);
 }
 
 // This declaration is needed for the GPU backend in order to generate the
