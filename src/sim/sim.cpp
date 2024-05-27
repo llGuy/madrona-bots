@@ -41,6 +41,7 @@ void Sim::registerTypes(ma::ECSRegistry &registry, const Config &cfg)
     registry.registerSingleton<WorldReset>();
 
     registry.registerArchetype<Agent>();
+    registry.registerArchetype<StaticObject>();
     registry.registerArchetype<ChunkInfoArchetype>();
     registry.registerArchetype<ChunkDataArchetype>();
 
@@ -57,16 +58,39 @@ void Sim::registerTypes(ma::ECSRegistry &registry, const Config &cfg)
             (uint32_t)ExportID::Sensor);
 }
 
+static inline void makeFloorPlane(Engine &ctx,
+                                  uint32_t num_chunks_x,
+                                  uint32_t num_chunks_y)
+{
+    auto floor_plane = ctx.makeRenderableEntity<StaticObject>();
+
+    ctx.get<ma::base::Position>(floor_plane) = ma::math::Vector3 {
+        0.f, 0.f, 0.f
+    };
+
+    ctx.get<ma::base::Rotation>(floor_plane) = ma::math::Quat {
+        1.f, 0.f, 0.f, 0.f
+    };
+
+    ctx.get<ma::base::Scale>(floor_plane) = ma::math::Diag3x3{
+        1.f, 1.f, 1.f
+    };
+
+    ctx.get<ma::base::ObjectID>(floor_plane).idx = (int32_t)SimObject::Plane;
+}
+
 static inline void initWorld(Engine &ctx,
                              uint32_t num_chunks_x,
                              uint32_t num_chunks_y)
 {
+    makeFloorPlane(ctx, num_chunks_x, num_chunks_y);
+
     for (int i = 0; i < ctx.data().numAgents; ++i) {
         auto entity = ctx.makeRenderableEntity<Agent>();
 
         // Initialize the entities with some positions
         ctx.get<ma::base::Position>(entity) = ma::math::Vector3{
-            i * 10.f, 0.f, 10.f
+            i * 10.f, 0.f, 1.f
         };
 
         ctx.get<ma::base::Rotation>(entity) =

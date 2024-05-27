@@ -85,8 +85,8 @@ void loadRenderObjects(ma::render::RenderManager &render_mgr)
     { // Override the materials
         // The agent's materials
         render_assets->objects[(uint32_t)SimObject::Agent].meshes[0].materialIDX = 3;
-        render_assets->objects[(uint32_t)SimObject::Agent].meshes[1].materialIDX = 3;
-        render_assets->objects[(uint32_t)SimObject::Agent].meshes[2].materialIDX = 3;
+        render_assets->objects[(uint32_t)SimObject::Agent].meshes[1].materialIDX = 4;
+        render_assets->objects[(uint32_t)SimObject::Agent].meshes[2].materialIDX = 4;
 
         // The wall's materials
         render_assets->objects[(uint32_t)SimObject::Wall].meshes[0].materialIDX = 0;
@@ -108,7 +108,7 @@ void loadRenderObjects(ma::render::RenderManager &render_mgr)
     render_mgr.configureLighting({
         { 
             true, 
-            ma::math::Vector3{1.0f, 1.0f, -0.05f}, 
+            ma::math::Vector3{1.0f, 1.0f, -2.0f}, 
             ma::math::Vector3{1.0f, 1.0f, 1.0f}
         }
     });

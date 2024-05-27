@@ -119,4 +119,13 @@ struct Agent : ma::Archetype<
     ma::render::RenderCamera
 > {};
 
+// This is mostly for the visualizer
+struct StaticObject : ma::Archetype<
+    ma::base::Position,
+    ma::base::Rotation,
+    ma::base::Scale,
+    ma::base::ObjectID,
+    ma::render::Renderable
+> {};
+
 }
