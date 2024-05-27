@@ -79,11 +79,51 @@ static inline void makeFloorPlane(Engine &ctx,
     ctx.get<ma::base::ObjectID>(floor_plane).idx = (int32_t)SimObject::Plane;
 }
 
+static inline void makeWalls(Engine &ctx,
+                             uint32_t num_chunks_x,
+                             uint32_t num_chunks_y)
+{
+    float world_len_x = num_chunks_x *
+                        ChunkData::kChunkWidth *
+                        ctx.data().cellDim;
+    float world_len_y = num_chunks_y *
+                        ChunkData::kChunkWidth *
+                        ctx.data().cellDim;
+
+    ma::math::Vector3 wall_centroids[4] = {
+        { world_len_x * 0.5f, 0.f, 0.f },
+        { 0.f, world_len_y * 0.5f, 0.f },
+        { world_len_x * 0.5f, world_len_y, 0.f },
+        { world_len_x, world_len_y * 0.5f, 0.f },
+    };
+
+    ma::math::Diag3x3 wall_scales[4] = {
+        { world_len_x * 0.5f, 1.f, 1.f },
+        { 1.f, world_len_y * 0.5f, 1.f },
+        { world_len_x * 0.5f, 1.f, 1.f },
+        { 1.f, world_len_y * 0.5f, 1.f },
+    };
+
+    for (int i = 0; i < 4; ++i) {
+        auto floor_plane = ctx.makeRenderableEntity<StaticObject>();
+        ctx.get<ma::base::Position>(floor_plane) = wall_centroids[i];
+
+        ctx.get<ma::base::Rotation>(floor_plane) = ma::math::Quat {
+            1.f, 0.f, 0.f, 0.f
+        };
+
+        ctx.get<ma::base::Scale>(floor_plane) = wall_scales[i];
+
+        ctx.get<ma::base::ObjectID>(floor_plane).idx = (int32_t)SimObject::Wall;
+    }
+}
+
 static inline void initWorld(Engine &ctx,
                              uint32_t num_chunks_x,
                              uint32_t num_chunks_y)
 {
     makeFloorPlane(ctx, num_chunks_x, num_chunks_y);
+    makeWalls(ctx, num_chunks_x, num_chunks_y);
 
     for (int i = 0; i < ctx.data().numAgents; ++i) {
         auto entity = ctx.makeRenderableEntity<Agent>();
