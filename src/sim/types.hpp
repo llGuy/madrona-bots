@@ -42,6 +42,9 @@ enum class AgentType {
 // This allows us to create a heuristic for the amount of activity there is
 // near any given point.
 struct ChunkInfo {
+    // Each chunk is 16 cells wide.
+    static constexpr uint32_t kChunkWidth = 16;
+
     ma::AtomicU32 numAgents;
 
     // This isn't exactly speed, but some heuristic for speed
@@ -52,22 +55,15 @@ struct ChunkInfo {
     // sort the bigger `ChunkData` struct around (because we are going to be
     // sorting the chunk infos by world once).
     ma::Entity chunkDataEntity;
-};
 
-struct ChunkInfoArchetype : ma::Archetype<
-    ChunkInfo
-> {};
-
-struct ChunkData {
-    // Each chunk is 16 cells wide.
-    static constexpr uint32_t kChunkWidth = 16;
+    ma::math::Vector2 chunkCoord;
 
     // Contains food data (or whatever other data we might need to store).
     uint8_t data[kChunkWidth * kChunkWidth];
 };
 
-struct ChunkDataArchetype : ma::Archetype<
-    ChunkData
+struct ChunkInfoArchetype : ma::Archetype<
+    ChunkInfo
 > {};
 
 struct SurroundingObservation {
@@ -86,6 +82,14 @@ struct Health {
 // reasons.
 struct HealthAccumulator {
     ma::AtomicI32 v;
+};
+
+struct BridgeSync {
+    // This doesn't have anything
+};
+
+struct AddFoodSingleton {
+    // This doesn't have anything
 };
 
 struct Agent : ma::Archetype<

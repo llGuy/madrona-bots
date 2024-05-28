@@ -20,7 +20,7 @@ inline ma::math::Vector2 Sim::getChunkCoord(
 {
     // Turn the world space position into cell position
     ma::math::Vector2 cell_pos = world_pos / cellDim;
-    ma::math::Vector2 chunk_coord = cell_pos / (float)ChunkData::kChunkWidth;
+    ma::math::Vector2 chunk_coord = cell_pos / (float)ChunkInfo::kChunkWidth;
     chunk_coord.x = std::floor(chunk_coord.x);
     chunk_coord.y = std::floor(chunk_coord.y);
     return chunk_coord;
@@ -40,7 +40,6 @@ inline int32_t Sim::getChunkIndex(
         return x + y * numChunksX;
     }
 }
-
 
 inline ChunkInfo *Sim::getChunkInfo(Engine &ctx, int32_t chunk_idx)
 {

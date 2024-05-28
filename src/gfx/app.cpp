@@ -161,10 +161,7 @@ int main(int argc, char **argv)
             // Does nothing for now
             ImGui::Begin("Raycast Visualizer");
 
-            auto draw_list = ImGui::GetWindowDrawList();
-            ImVec2 window_pos = ImGui::GetWindowPos();
-
-            int vert_off = 20;
+            int vert_off = 45;
             float pix_scale = 20;
 
             int64_t num_bytes = cfg.sensorSize;
@@ -178,6 +175,11 @@ int main(int argc, char **argv)
 
             uint32_t num_forward_rays = 3 * 32 / 4;
             uint32_t num_backward_rays = 1 * 32 / 4;
+
+            ImGui::Text("Raycast output at index %d\n", (int)print_ptr[0]);
+
+            auto draw_list = ImGui::GetWindowDrawList();
+            ImVec2 window_pos = ImGui::GetWindowPos();
 
             for (int i = 0; i < num_forward_rays; ++i) {
                 auto realColor = IM_COL32(

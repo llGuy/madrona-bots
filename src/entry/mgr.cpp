@@ -28,6 +28,8 @@ struct Manager::Impl {
 
     mbots::Action *actionBuffer;
 
+    mbots::SimBridge *simBridge;
+
 
 
     static Impl *make(const Manager::Config &cfg);
@@ -36,7 +38,8 @@ struct Manager::Impl {
          ma::MWCudaExecutor &&exec,
          ma::MWCudaLaunchGraph &&step,
          ma::MWCudaLaunchGraph &&sensor,
-         mbots::Action *action_buffer);
+         mbots::Action *action_buffer,
+         mbots::SimBridge *sim_bridge);
 
     ~Impl();
 
@@ -59,25 +62,31 @@ Manager::Impl::Impl(const Config &mgr_cfg,
                     ma::MWCudaExecutor &&exec,
                     ma::MWCudaLaunchGraph &&step,
                     ma::MWCudaLaunchGraph &&sensor,
-                    mbots::Action *action_buffer)
+                    mbots::Action *action_buffer,
+                    mbots::SimBridge *sim_bridge)
     : cfg(cfg),
       gpuExec(std::move(exec)),
       stepGraph(std::move(step)),
       sensorGraph(std::move(sensor)),
-      actionBuffer(action_buffer)
+      actionBuffer(action_buffer),
+      simBridge(sim_bridge)
 {
 }
 
 Manager::Impl *Manager::Impl::make(const Config &mgr_cfg)
 {
+    mbots::SimBridge *sim_bridge = (mbots::SimBridge *)ma::cu::allocReadback(
+            sizeof(mbots::SimBridge));
+
     // Initialize the GPU executor and launch graphs
     mbots::Sim::Config sim_cfg = {
-        .numAgentsPerWorld = mgr_cfg.numAgentsPerWorld,
         .initRandKey = ma::rand::initKey(mgr_cfg.randSeed),
-        .numChunksX = 2,
-        .numChunksY = 2,
+        .numChunksX = 8,
+        .numChunksY = 6,
         .cellDim = 1.f,
-        .renderBridge = mgr_cfg.renderBridge
+        .renderBridge = mgr_cfg.renderBridge,
+        .simBridge = sim_bridge,
+        .totalAllowedFood = 30
     };
 
 
@@ -111,10 +120,15 @@ Manager::Impl *Manager::Impl::make(const Config &mgr_cfg)
     CUcontext cu_ctx = ma::MWCudaExecutor::initCUDA(mgr_cfg.gpuID);
     ma::MWCudaExecutor gpu_exec(state_cfg, compile_cfg, cu_ctx);
 
+    ma::MWCudaLaunchGraph init_graph = gpu_exec.buildLaunchGraph(
+            mbots::TaskGraphID::Init, false);
     ma::MWCudaLaunchGraph step_graph = gpu_exec.buildLaunchGraph(
             mbots::TaskGraphID::Step, false);
     ma::MWCudaLaunchGraph sensor_graph = gpu_exec.buildLaunchGraph(
             mbots::TaskGraphID::Sensor, true);
+
+    // Run the init taskgraph
+    gpu_exec.run(init_graph);
 
     mbots::Action *action_buffer = (mbots::Action *)
         gpu_exec.getExported((uint32_t)mbots::ExportID::Action);
@@ -123,7 +137,8 @@ Manager::Impl *Manager::Impl::make(const Config &mgr_cfg)
                     std::move(gpu_exec),
                     std::move(step_graph),
                     std::move(sensor_graph),
-                    action_buffer);
+                    action_buffer,
+                    sim_bridge);
 }
 
 Manager::Impl::~Impl()
@@ -152,8 +167,7 @@ ma::py::Tensor Manager::sensorTensor() const
     return impl_->exportTensor(mbots::ExportID::Sensor,
                                ma::py::TensorElementType::UInt8,
                                {
-                                   impl_->cfg.numWorlds * 
-                                        impl_->cfg.numAgentsPerWorld,
+                                   impl_->simBridge->totalNumAgents,
                                    pixels_per_view,
                                });
 }

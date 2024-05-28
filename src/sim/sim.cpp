@@ -33,17 +33,17 @@ void Sim::registerTypes(ma::ECSRegistry &registry, const Config &cfg)
     registry.registerComponent<Done>();
     registry.registerComponent<AgentType>();
     registry.registerComponent<ChunkInfo>();
-    registry.registerComponent<ChunkData>();
     registry.registerComponent<SurroundingObservation>();
     registry.registerComponent<Health>();
     registry.registerComponent<HealthAccumulator>();
 
     registry.registerSingleton<WorldReset>();
+    registry.registerSingleton<BridgeSync>();
+    registry.registerSingleton<AddFoodSingleton>();
 
     registry.registerArchetype<Agent>();
     registry.registerArchetype<StaticObject>();
     registry.registerArchetype<ChunkInfoArchetype>();
-    registry.registerArchetype<ChunkDataArchetype>();
 
     registry.exportSingleton<WorldReset>(
         (uint32_t)ExportID::Reset);
@@ -84,10 +84,10 @@ static inline void makeWalls(Engine &ctx,
                              uint32_t num_chunks_y)
 {
     float world_len_x = num_chunks_x *
-                        ChunkData::kChunkWidth *
+                        ChunkInfo::kChunkWidth *
                         ctx.data().cellDim;
     float world_len_y = num_chunks_y *
-                        ChunkData::kChunkWidth *
+                        ChunkInfo::kChunkWidth *
                         ctx.data().cellDim;
 
     ma::math::Vector3 wall_centroids[4] = {
@@ -98,10 +98,10 @@ static inline void makeWalls(Engine &ctx,
     };
 
     ma::math::Diag3x3 wall_scales[4] = {
-        { world_len_x * 0.5f, 1.f, 1.f },
-        { 1.f, world_len_y * 0.5f, 1.f },
-        { world_len_x * 0.5f, 1.f, 1.f },
-        { 1.f, world_len_y * 0.5f, 1.f },
+        { world_len_x * 0.5f, 0.2f, 1.f },
+        { 0.2f, world_len_y * 0.5f, 1.f },
+        { world_len_x * 0.5f, 0.2f, 1.f },
+        { 0.2f, world_len_y * 0.5f, 1.f },
     };
 
     for (int i = 0; i < 4; ++i) {
@@ -125,38 +125,57 @@ static inline void initWorld(Engine &ctx,
     makeFloorPlane(ctx, num_chunks_x, num_chunks_y);
     makeWalls(ctx, num_chunks_x, num_chunks_y);
 
-    for (int i = 0; i < ctx.data().numAgents; ++i) {
-        auto entity = ctx.makeRenderableEntity<Agent>();
+    for (int y = 0; y < 5; ++y) {
+        for (int x = 0; x < 5; ++x) {
+            auto entity = ctx.makeRenderableEntity<Agent>();
 
-        // Initialize the entities with some positions
-        ctx.get<ma::base::Position>(entity) = ma::math::Vector3{
-            i * 10.f, 0.f, 1.f
-        };
+            // Initialize the entities with some positions
+            ctx.get<ma::base::Position>(entity) = ma::math::Vector3{
+                3.f + x * 10.f, 3.f + y * 10.f, 1.f
+            };
 
-        ctx.get<ma::base::Rotation>(entity) =
-            ma::math::Quat::angleAxis(0.f, ma::math::Vector3{0.f, 0.f, 1.f});
+            ctx.get<ma::base::Rotation>(entity) =
+                ma::math::Quat::angleAxis(0.f, ma::math::Vector3{0.f, 0.f, 1.f});
 
-        ctx.get<ma::base::Scale>(entity) = ma::math::Diag3x3{
-            1.f, 1.f, 1.f
-        };
+            ctx.get<ma::base::Scale>(entity) = ma::math::Diag3x3{
+                1.f, 1.f, 1.f
+            };
 
-        ctx.get<ma::base::ObjectID>(entity).idx = (int32_t)SimObject::Agent;
+            ctx.get<ma::base::ObjectID>(entity).idx = (int32_t)SimObject::Agent;
 
-        // Attach a view to this entity so that sensor data gets generated
-        // for it.
-        ma::render::RenderingSystem::attachEntityToView(
-            ctx, entity, 90.f, 0.1f, { 0.f, 0.f, 0.f });
+            // Attach a view to this entity so that sensor data gets generated
+            // for it.
+            ma::render::RenderingSystem::attachEntityToView(
+                    ctx, entity, 90.f, 0.1f, { 0.f, 0.f, 0.f });
 
-        ctx.get<AgentType>(entity) = (i == 0) ?
-            AgentType::Herbivore : AgentType::Carnivore;
+            ctx.get<AgentType>(entity) = AgentType::Carnivore;
 
-        ctx.get<Health>(entity).v = 100;
-        ctx.get<HealthAccumulator>(entity).v.store_relaxed(100);
+            ctx.get<Health>(entity).v = 100;
+            ctx.get<HealthAccumulator>(entity).v.store_relaxed(100);
+        }
     }
 
-    ma::Loc loc = ctx.makeStationary<ChunkInfoArchetype>(num_chunks_x * num_chunks_y);
+    ma::Loc loc = ctx.makeStationary<ChunkInfoArchetype>(
+            num_chunks_x * num_chunks_y);
 
     ctx.data().chunksLoc = loc;
+}
+
+inline void initializeChunks(Engine &ctx,
+                             ChunkInfo &chunk_info)
+{
+    auto *state_mgr = ma::mwGPU::getStateManager();
+
+    ChunkInfo *base = state_mgr->getArchetypeComponent<
+        ChunkInfoArchetype, ChunkInfo>();
+
+    uint32_t linear_idx = &chunk_info - base;
+
+    chunk_info.chunkCoord.x = linear_idx % ctx.data().numChunksX;
+    chunk_info.chunkCoord.y = linear_idx / ctx.data().numChunksX;
+
+    memset(chunk_info.data, 0, 
+           sizeof(uint8_t) * ChunkInfo::kChunkWidth * ChunkInfo::kChunkWidth);
 }
 
 inline void resetSystem(Engine &ctx, WorldReset &reset)
@@ -164,6 +183,70 @@ inline void resetSystem(Engine &ctx, WorldReset &reset)
     // TODO: Implement world resetting
 }
 
+// Returns true if food was added successfully
+inline bool addFoodToChunk(Engine &ctx,
+                           ChunkInfo &chunk_info)
+{
+    uint32_t rand_x = ctx.data().rng.sampleI32(0, ChunkInfo::kChunkWidth);
+    uint32_t rand_y = ctx.data().rng.sampleI32(0, ChunkInfo::kChunkWidth);
+
+    if (chunk_info.data[rand_x + rand_y * ChunkInfo::kChunkWidth] < 255) {
+        chunk_info.data[rand_x + rand_y * ChunkInfo::kChunkWidth]++;
+
+        ctx.data().currentNumFood.fetch_add_relaxed(1);
+
+        { // For visualization purposes, we also add a food entity
+            auto food_ent = ctx.makeRenderableEntity<StaticObject>();
+
+            ctx.get<ma::base::Position>(food_ent) = ma::math::Vector3 {
+                ((float)rand_x + chunk_info.chunkCoord.x * ChunkInfo::kChunkWidth),
+                ((float)rand_y + chunk_info.chunkCoord.y * ChunkInfo::kChunkWidth),
+                0.f
+            } * ctx.data().cellDim;
+
+            ctx.get<ma::base::Rotation>(food_ent) = 
+                ma::math::Quat::angleAxis(
+                        2.f * ma::math::pi * ctx.data().rng.sampleUniform(),
+                        ma::math::Vector3{ 0.f, 0.f, 1.f });
+
+            ctx.get<ma::base::Scale>(food_ent) = ma::math::Diag3x3{
+                1.f, 1.f, 1.f
+            };
+
+            ctx.get<ma::base::ObjectID>(food_ent).idx = (int32_t)SimObject::Food;
+        }
+
+        return true;
+    } else {
+        return false;
+    }
+}
+
+inline void addFoodSystem(Engine &ctx,
+                          AddFoodSingleton)
+{
+    if (ctx.data().rng.sampleI32(0, 10) == 0) {
+        uint32_t rand_sample = ctx.data().rng.sampleI32(1, 3);
+
+        uint32_t diff_allowed = ctx.data().totalAllowedFood -
+            ctx.data().currentNumFood.load_relaxed();
+
+        rand_sample = std::min(rand_sample, diff_allowed);
+
+        for (int i = 0; i < rand_sample; ++i) {
+            uint32_t chunk_x = ctx.data().rng.sampleI32(0, ctx.data().numChunksX);
+            uint32_t chunk_y = ctx.data().rng.sampleI32(0, ctx.data().numChunksY);
+
+            uint32_t linear_idx = chunk_x + chunk_y * ctx.data().numChunksX;
+
+            ChunkInfo *chunk_info = ctx.data().getChunkInfo(ctx, linear_idx);
+
+            addFoodToChunk(ctx, *chunk_info);
+        }
+    }
+}
+
+// Here, we will also do food adding
 inline void resetChunkInfoSystem(Engine &ctx,
                                  ChunkInfo &chunk_info)
 {
@@ -171,6 +254,26 @@ inline void resetChunkInfoSystem(Engine &ctx,
 
     chunk_info.numAgents.store_relaxed(0);
     chunk_info.totalSpeed.store_relaxed(0.0f);
+
+
+#if 0
+
+    // Randomly decide on whether to add food in this chunk
+    uint32_t rand_sample = ctx.data().rng.sampleI32(0, 100);
+
+    if (rand_sample <= 1) {
+        // Create a chunk data struct if needed and add food
+        // This might go over the total allowed food but doesn't matter,
+        // it'll not go over too much
+        if (ctx.data().currentNumFood.load_relaxed() + 1 < 
+            ctx.data().totalAllowedFood) {
+
+            if (addFoodToChunk(ctx, chunk_info)) {
+                ctx.data().currentNumFood.fetch_add_relaxed(1);
+            }
+        }
+    }
+#endif
 }
 
 inline void actionSystem(Engine &ctx,
@@ -217,10 +320,10 @@ inline void actionSystem(Engine &ctx,
 
     // Make sure to clamp the position to the world boundaries
     const float kWorldLimitX = ctx.data().cellDim * 
-                               (float)ChunkData::kChunkWidth *
+                               (float)ChunkInfo::kChunkWidth *
                                (float)ctx.data().numChunksX;
     const float kWorldLimitY = ctx.data().cellDim * 
-                               (float)ChunkData::kChunkWidth *
+                               (float)ChunkInfo::kChunkWidth *
                                (float)ctx.data().numChunksY;
 
     pos.x = std::min(kWorldLimitX, std::max(0.f, pos.x));
@@ -265,9 +368,9 @@ inline void updateSurroundingObservation(Engine &ctx,
                                          SurroundingObservation &surroundings)
 {
     ma::math::Vector2 cell_pos = pos.xy() / ctx.data().cellDim;
-    cell_pos -= ma::math::Vector2{ (float)ChunkData::kChunkWidth * 0.5f,
-                                   (float)ChunkData::kChunkWidth * 0.5f };
-    ma::math::Vector2 chcoord = cell_pos / (float)ChunkData::kChunkWidth;
+    cell_pos -= ma::math::Vector2{ (float)ChunkInfo::kChunkWidth * 0.5f,
+                                   (float)ChunkInfo::kChunkWidth * 0.5f };
+    ma::math::Vector2 chcoord = cell_pos / (float)ChunkInfo::kChunkWidth;
 
     // These are the coordinates of the chunks with centroids which
     // surround this agent.
@@ -355,6 +458,29 @@ ma::TaskGraph::NodeID queueSortByWorld(ma::TaskGraph::Builder &builder,
     return post_sort_reset_tmp;
 }
 
+inline void bridgeSyncSystem(Engine &ctx,
+                       BridgeSync)
+{
+    // Only do this for the first world
+    if (ctx.worldID().idx == 0) {
+        auto *state_mgr = ma::mwGPU::getStateManager();
+
+        ctx.data().simBridge->totalNumAgents = 
+            state_mgr->getArchetypeNumRows<Agent>();
+    }
+}
+
+static void setupInitTasks(ma::TaskGraphBuilder &builder,
+                           const Sim::Config &cfg)
+{
+    auto init_chunks = builder.addToGraph<ma::ParallelForNode<Engine,
+         initializeChunks,
+            ChunkInfo
+         >>({});
+
+    (void)init_chunks;
+}
+
 static void setupStepTasks(ma::TaskGraphBuilder &builder, 
                            const Sim::Config &cfg)
 {
@@ -365,6 +491,11 @@ static void setupStepTasks(ma::TaskGraphBuilder &builder,
             ChunkInfo
         >>({});
 
+    auto add_food_sys = builder.addToGraph<ma::ParallelForNode<Engine,
+        addFoodSystem,
+            AddFoodSingleton
+        >>({reset_chunk_info});
+
     // Turn policy actions into movement
     auto action_sys = builder.addToGraph<ma::ParallelForNode<Engine,
         actionSystem,
@@ -374,7 +505,7 @@ static void setupStepTasks(ma::TaskGraphBuilder &builder,
             AgentType,
             Action,
             ma::render::RenderCamera
-        >>({reset_chunk_info});
+        >>({add_food_sys});
 
     auto health_sync_sys = builder.addToGraph<ma::ParallelForNode<Engine,
         healthSync,
@@ -404,7 +535,12 @@ static void setupStepTasks(ma::TaskGraphBuilder &builder,
     auto sort_agents = queueSortByWorld<Agent>(
         builder, {recycle_sys});
 
-    (void)sort_agents;
+    auto bridge_sync_sys = builder.addToGraph<ma::ParallelForNode<Engine,
+        bridgeSyncSystem,
+            BridgeSync
+        >>({sort_agents});
+
+    (void)bridge_sync_sys;
 }
 
 static void setupSensorTasks(ma::TaskGraphBuilder &builder, 
@@ -417,6 +553,7 @@ static void setupSensorTasks(ma::TaskGraphBuilder &builder,
 // Build the task graph
 void Sim::setupTasks(ma::TaskGraphManager &taskgraph_mgr, const Config &cfg)
 {
+    setupInitTasks(taskgraph_mgr.init(TaskGraphID::Init), cfg);
     setupStepTasks(taskgraph_mgr.init(TaskGraphID::Step), cfg);
     setupSensorTasks(taskgraph_mgr.init(TaskGraphID::Sensor), cfg);
 }
@@ -430,16 +567,20 @@ Sim::Sim(Engine &ctx,
       rng(ma::rand::split_i(initRandKey, curWorldEpisode++,
                             (uint32_t)ctx.worldID().idx)),
       autoReset(false),
-      numAgents(cfg.numAgentsPerWorld),
       numChunksX(cfg.numChunksX),
       numChunksY(cfg.numChunksY),
-      cellDim(cfg.cellDim)
+      cellDim(cfg.cellDim),
+      simBridge(cfg.simBridge),
+      totalAllowedFood(cfg.totalAllowedFood),
+      currentNumFood(0)
 {
     initWorld(ctx, numChunksX, numChunksY);
 
     // Initialize state required for the raytracing
     ma::render::RenderingSystem::init(ctx,
             (ma::render::RenderECSBridge *)cfg.renderBridge);
+
+    currentNumFood.store_relaxed(0);
 }
 
 // This declaration is needed for the GPU backend in order to generate the

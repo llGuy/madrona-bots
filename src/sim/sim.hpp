@@ -25,6 +25,7 @@ enum class ExportID : uint32_t {
 };
 
 enum class TaskGraphID : uint32_t {
+    Init,
     Step,
     Sensor,
     NumTaskGraphs,
@@ -38,10 +39,14 @@ enum class SimObject : uint32_t {
     NumObjects
 };
 
+// This is the bridge between the simulator and the Python exporter.
+struct SimBridge {
+    uint32_t totalNumAgents;
+};
+
 struct Sim : ma::WorldBase {
     // Configuration struct for the simulation
     struct Config {
-        uint32_t numAgentsPerWorld;
         ma::RandKey initRandKey;
 
         uint32_t numChunksX;
@@ -50,6 +55,10 @@ struct Sim : ma::WorldBase {
         float cellDim;
 
         void *renderBridge;
+
+        SimBridge *simBridge;
+
+        uint32_t totalAllowedFood;
     };
 
     // Per-world configuration - not needed for now.
@@ -94,9 +103,6 @@ struct Sim : ma::WorldBase {
     // at the end of each episode?
     bool autoReset;
 
-    // Number of agents in this world.
-    uint32_t numAgents;
-
     uint32_t numChunksX;
     uint32_t numChunksY;
 
@@ -105,6 +111,12 @@ struct Sim : ma::WorldBase {
     float cellDim;
 
     ma::Loc chunksLoc;
+
+    SimBridge *simBridge;
+
+    uint32_t totalAllowedFood;
+
+    ma::AtomicU32 currentNumFood;
 };
 
 class Engine : public ::ma::CustomContext<Engine, Sim> {
