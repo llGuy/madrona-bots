@@ -36,6 +36,12 @@ void Sim::registerTypes(ma::ECSRegistry &registry, const Config &cfg)
     registry.registerComponent<SurroundingObservation>();
     registry.registerComponent<Health>();
     registry.registerComponent<HealthAccumulator>();
+    registry.registerComponent<Species>();
+    registry.registerComponent<SpeciesObservation>();
+    registry.registerComponent<PositionObservation>();
+    registry.registerComponent<HealthObservation>();
+    registry.registerComponent<AgentObservationBridge>();
+    registry.registerComponent<SensorOutputIndex>();
 
     registry.registerSingleton<WorldReset>();
     registry.registerSingleton<BridgeSync>();
@@ -44,6 +50,7 @@ void Sim::registerTypes(ma::ECSRegistry &registry, const Config &cfg)
     registry.registerArchetype<Agent>();
     registry.registerArchetype<StaticObject>();
     registry.registerArchetype<ChunkInfoArchetype>();
+    registry.registerArchetype<AgentObservationArchetype>();
 
     registry.exportSingleton<WorldReset>(
         (uint32_t)ExportID::Reset);
@@ -56,6 +63,8 @@ void Sim::registerTypes(ma::ECSRegistry &registry, const Config &cfg)
     registry.exportColumn<ma::render::RaycastOutputArchetype,
         ma::render::RenderOutputBuffer>(
             (uint32_t)ExportID::Sensor);
+    registry.exportColumn<Agent, SensorOutputIndex>(
+            (uint32_t)ExportID::SensorIndex);
 }
 
 static inline void makeFloorPlane(Engine &ctx,
@@ -127,7 +136,7 @@ static inline void initWorld(Engine &ctx,
 
     for (int y = 0; y < 5; ++y) {
         for (int x = 0; x < 5; ++x) {
-            auto entity = ctx.makeRenderableEntity<Agent>();
+            auto entity = ctx.makeAgent();
 
             // Initialize the entities with some positions
             ctx.get<ma::base::Position>(entity) = ma::math::Vector3{
@@ -152,6 +161,8 @@ static inline void initWorld(Engine &ctx,
 
             ctx.get<Health>(entity).v = 100;
             ctx.get<HealthAccumulator>(entity).v.store_relaxed(100);
+
+            ctx.get<Species>(entity).speciesID = x;
         }
     }
 
@@ -458,6 +469,55 @@ ma::TaskGraph::NodeID queueSortByWorld(ma::TaskGraph::Builder &builder,
     return post_sort_reset_tmp;
 }
 
+template <typename ArchetypeT>
+ma::TaskGraph::NodeID queueSortBySpecies(ma::TaskGraph::Builder &builder,
+                                         ma::Span<const ma::TaskGraph::NodeID> deps)
+{
+    auto sort_sys =
+        builder.addToGraph<ma::SortArchetypeNode<ArchetypeT, SpeciesObservation>>(
+            deps);
+    auto post_sort_reset_tmp =
+        builder.addToGraph<ma::ResetTmpAllocNode>({sort_sys});
+
+    return post_sort_reset_tmp;
+}
+
+inline void updateObservations(Engine &ctx,
+                               ma::Entity e,
+                               AgentObservationBridge &bridge,
+                               Species &species,
+                               ma::base::Position &pos,
+                               Health &health,
+                               SurroundingObservation &sur)
+{
+    ma::Entity obs_e = bridge.obsEntity;
+
+    ctx.get<SpeciesObservation>(obs_e).speciesID = species.speciesID;
+
+    ctx.get<PositionObservation>(obs_e).pos = ma::math::Vector2 {
+        pos.x, pos.y
+    };
+
+    ctx.get<HealthObservation>(obs_e).v = health.v;
+
+    ctx.get<SurroundingObservation>(obs_e) = {
+        sur.presenceHeuristic,
+        sur.movementHeuristic
+    };
+}
+
+inline void updateSensorOutputIdx(Engine &ctx,
+                                  AgentObservationBridge bridge,
+                                  SensorOutputIndex &output_idx,
+                                  ma::render::RenderCamera &cam)
+{
+    uint32_t row_idx = ctx.loc(bridge.obsEntity).row;
+    ctx.get<ma::render::PerspectiveCameraData>(
+            cam.cameraEntity).rowIDX = row_idx;
+
+    output_idx.idx = row_idx;
+}
+
 inline void bridgeSyncSystem(Engine &ctx,
                        BridgeSync)
 {
@@ -541,10 +601,34 @@ static void setupStepTasks(ma::TaskGraphBuilder &builder,
 
     auto recycle_sys = builder.addToGraph<ma::RecycleEntitiesNode>({sort_agents});
 
+    // After the entities get deleted and recycled, we go through
+    // all the observation entities to update them.
+    auto update_obs_sys = builder.addToGraph<ma::ParallelForNode<Engine,
+        updateObservations,
+            ma::Entity,
+            AgentObservationBridge,
+            Species,
+            ma::base::Position,
+            Health,
+            SurroundingObservation
+        >>({recycle_sys});
+
+    // Now, sort all the observation entities by species (even across the worlds)
+    auto sort_obs = queueSortBySpecies<AgentObservationArchetype>(
+            builder, {update_obs_sys});
+
+    // After the sort, we update the perspective camera data row idx output index
+    auto update_sensor_idx = builder.addToGraph<ma::ParallelForNode<Engine,
+        updateSensorOutputIdx,
+            AgentObservationBridge,
+            SensorOutputIndex,
+            ma::render::RenderCamera
+        >>({sort_obs});
+
     auto bridge_sync_sys = builder.addToGraph<ma::ParallelForNode<Engine,
         bridgeSyncSystem,
             BridgeSync
-        >>({recycle_sys});
+        >>({update_sensor_idx});
 
     (void)bridge_sync_sys;
 }

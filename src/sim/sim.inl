@@ -15,6 +15,27 @@ inline void Engine::destroyRenderableEntity(ma::Entity e)
     destroyEntity(e);
 }
 
+inline ma::Entity Engine::makeAgent()
+{
+    ma::Entity e = makeRenderableEntity<Agent>();
+
+    // Create the observation entity too
+    get<AgentObservationBridge>(e).obsEntity =
+        makeEntity<AgentObservationArchetype>();
+
+    return e;
+}
+
+inline void Engine::destroyAgent(ma::Entity e)
+{
+    // Destroy the observation entity
+    ma::Entity bridge_e = get<AgentObservationBridge>(e).obsEntity;
+
+    destroyEntity(bridge_e);
+
+    destroyRenderableEntity(e);
+}
+
 inline ma::math::Vector2 Sim::getChunkCoord(
         const ma::math::Vector2 &world_pos)
 {

@@ -185,6 +185,15 @@ ma::py::Tensor Manager::sensorTensor() const
                                });
 }
 
+ma::py::Tensor Manager::sensorIndexTensor() const
+{
+    return impl_->exportTensor(mbots::ExportID::SensorIndex,
+                               ma::py::TensorElementType::Int32,
+                               {
+                                   impl_->simBridge->totalNumAgents,
+                                   1
+                               });
+}
 
 void Manager::setAction(uint32_t agent_idx,
                         int32_t forward,

@@ -91,41 +91,14 @@ int main(int argc, char **argv)
         printf("\n");
     };
 
-    auto world_input_fn = [&](ma::CountT world_idx, 
-                              const ma::viz::Viewer::UserInput &input) {
-        using Key = ma::viz::Viewer::KeyboardKey;
-
-        // Any sort of world-wide control like resetting or something.
-    };
-
-    auto agent_input_fn = [&](ma::CountT world_idx, ma::CountT agent_idx,
-                              const ma::viz::Viewer::UserInput &input) {
-        using Key = ma::viz::Viewer::KeyboardKey;
-
-        int32_t forward = 0, backward = 0, rotate = 0, shoot = 0;
-
-        if (input.keyPressed(Key::W)) forward = 1;
-        if (input.keyPressed(Key::S)) backward = 1;
-        if (input.keyPressed(Key::R)) rotate = 1;
-        if (input.keyPressed(Key::Space)) shoot = 1;
-
-        // For now, we only control the agent of the first world.
-        mgr.setAction(agent_idx, forward, backward, rotate, shoot);
-    };
-
-    auto step_fn = [&]() {
-        mgr.step();
-
-        // After the step, we need the renderer to read from the ECS.
-        render_mgr.readECS();
-    };
-
-    auto ui_fn = [&]() {
-        // If we want some extra control of the UI that pops up.
-    };
-
     uint32_t inspecting_agent_idx = 0;
     uint32_t inspecting_world_idx = 0;
+
+    // Readback for the sensor information
+    int64_t num_bytes = cfg.sensorSize;
+    uint8_t *print_ptr = (uint8_t *)ma::cu::allocReadback(num_bytes);
+
+    uint32_t *sensor_idx_ptr = (uint32_t *)ma::cu::allocReadback(sizeof(uint32_t));
 
     viewer.loop(
         // Function for controling input that affects the whole world
@@ -168,15 +141,18 @@ int main(int argc, char **argv)
             int vert_off = 45;
             float pix_scale = 20;
 
-            int64_t num_bytes = cfg.sensorSize;
-            uint8_t *print_ptr = (uint8_t *)ma::cu::allocReadback(num_bytes);
+            uint32_t rt_output_offset = 0;
 
             uint8_t *sensor_tensor = (uint8_t *)(mgr.sensorTensor().devicePtr());
+            uint32_t *sensor_idx_tensor = (uint32_t *)(mgr.sensorIndexTensor().devicePtr());
 
             uint32_t global_agent_idx = mgr.agentOffsetForWorld(inspecting_world_idx) +
                                         inspecting_agent_idx;
 
-            cudaMemcpy(print_ptr, sensor_tensor + global_agent_idx * num_bytes,
+            cudaMemcpy(sensor_idx_ptr, sensor_idx_tensor + global_agent_idx,
+                    sizeof(uint32_t), cudaMemcpyDeviceToHost);
+
+            cudaMemcpy(print_ptr, sensor_tensor + (*sensor_idx_ptr) * num_bytes,
                     num_bytes,
                     cudaMemcpyDeviceToHost);
 

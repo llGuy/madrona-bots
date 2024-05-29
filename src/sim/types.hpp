@@ -78,6 +78,10 @@ struct Health {
     int32_t v;
 };
 
+struct HealthObservation : Health {
+    // Nothing
+};
+
 // We need to separate out the Health and HealthAccumulator for concurrency
 // reasons.
 struct HealthAccumulator {
@@ -92,6 +96,26 @@ struct AddFoodSingleton {
     // This doesn't have anything
 };
 
+struct PositionObservation {
+    ma::math::Vector2 pos;
+};
+
+struct Species {
+    uint32_t speciesID;
+};
+
+struct SpeciesObservation : Species {
+    // This is just inherited
+};
+
+struct AgentObservationBridge {
+    ma::Entity obsEntity;
+};
+
+struct SensorOutputIndex {
+    uint32_t idx;
+};
+
 struct Agent : ma::Archetype<
     ma::base::Position,
     ma::base::Rotation,
@@ -100,6 +124,7 @@ struct Agent : ma::Archetype<
 
 
     // Properties
+    Species,
     AgentType,
     Health,
     HealthAccumulator,
@@ -120,7 +145,22 @@ struct Agent : ma::Archetype<
 
     // Required or sensory input.
     ma::render::Renderable,
-    ma::render::RenderCamera
+    ma::render::RenderCamera,
+
+    AgentObservationBridge,
+
+    // Used by the visualizer to get the correct raycast output.
+    SensorOutputIndex
+> {};
+
+// This is an archetype just for observations.
+//
+// This is because the observations have to be sorted by species.
+struct AgentObservationArchetype : ma::Archetype<
+    SpeciesObservation,
+    PositionObservation,
+    HealthObservation,
+    SurroundingObservation
 > {};
 
 // This is mostly for the visualizer

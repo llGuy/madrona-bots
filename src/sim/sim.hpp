@@ -21,6 +21,7 @@ enum class ExportID : uint32_t {
     Reward,
     Done,
     Sensor,
+    SensorIndex,
     NumExports
 };
 
@@ -129,6 +130,9 @@ public:
     inline ma::Entity makeRenderableEntity();
 
     inline void destroyRenderableEntity(ma::Entity e);
+
+    inline ma::Entity makeAgent();
+    inline void destroyAgent(ma::Entity e);
 };
 
 }

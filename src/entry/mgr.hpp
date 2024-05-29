@@ -23,6 +23,7 @@ public:
     void step();
 
     ma::py::Tensor sensorTensor() const;
+    ma::py::Tensor sensorIndexTensor() const;
 
     void setAction(uint32_t agent_idx,
                    int32_t forward,
