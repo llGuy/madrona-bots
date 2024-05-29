@@ -30,6 +30,9 @@ struct Manager::Impl {
 
     mbots::SimBridge *simBridge;
 
+    int32_t *agentWorldOffsets;
+    int32_t *agentWorldCounts;
+
 
 
     static Impl *make(const Manager::Config &cfg);
@@ -47,6 +50,14 @@ struct Manager::Impl {
     {
         gpuExec.run(stepGraph);
         gpuExec.run(sensorGraph);
+
+        // Read the agent world offsets and counts
+        cudaMemcpy(agentWorldOffsets, simBridge->agentWorldOffsets, 
+                   sizeof(int32_t) * cfg.numWorlds,
+                   cudaMemcpyDeviceToHost);
+        cudaMemcpy(agentWorldCounts, simBridge->agentWorldCounts, 
+                   sizeof(int32_t) * cfg.numWorlds,
+                   cudaMemcpyDeviceToHost);
     }
 
     inline ma::py::Tensor exportTensor(mbots::ExportID slot,
@@ -64,12 +75,14 @@ Manager::Impl::Impl(const Config &mgr_cfg,
                     ma::MWCudaLaunchGraph &&sensor,
                     mbots::Action *action_buffer,
                     mbots::SimBridge *sim_bridge)
-    : cfg(cfg),
+    : cfg(mgr_cfg),
       gpuExec(std::move(exec)),
       stepGraph(std::move(step)),
       sensorGraph(std::move(sensor)),
       actionBuffer(action_buffer),
-      simBridge(sim_bridge)
+      simBridge(sim_bridge),
+      agentWorldOffsets((int32_t *)malloc(sizeof(int32_t) * mgr_cfg.numWorlds)),
+      agentWorldCounts((int32_t *)malloc(sizeof(int32_t) * mgr_cfg.numWorlds))
 {
 }
 
@@ -190,4 +203,9 @@ void Manager::setAction(uint32_t agent_idx,
 
     cudaMemcpy(action_ptr, &action, sizeof(mbots::Action),
                 cudaMemcpyHostToDevice);
+}
+
+uint32_t Manager::agentOffsetForWorld(uint32_t world_idx)
+{
+    return impl_->agentWorldOffsets[world_idx];
 }

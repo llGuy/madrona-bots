@@ -30,6 +30,8 @@ public:
                    int32_t rotate,
                    int32_t shoot);
 
+    uint32_t agentOffsetForWorld(uint32_t world_idx);
+
 private:
     struct Impl;
 

@@ -167,7 +167,7 @@ inline void initializeChunks(Engine &ctx,
     auto *state_mgr = ma::mwGPU::getStateManager();
 
     ChunkInfo *base = state_mgr->getArchetypeComponent<
-        ChunkInfoArchetype, ChunkInfo>();
+        ChunkInfoArchetype, ChunkInfo>() + ctx.data().chunksLoc.row;
 
     uint32_t linear_idx = &chunk_info - base;
 
@@ -434,7 +434,7 @@ inline void updateSurroundingObservation(Engine &ctx,
     surroundings.movementHeuristic = total_speed_interpolated;
 }
 
-inline void rewardSystem(Engine &,
+inline void rewardSystem(Engine &ctx,
                          ma::base::Position pos,
                          Reward &out_reward)
 {
@@ -467,6 +467,10 @@ inline void bridgeSyncSystem(Engine &ctx,
 
         ctx.data().simBridge->totalNumAgents = 
             state_mgr->getArchetypeNumRows<Agent>();
+        ctx.data().simBridge->agentWorldOffsets =
+            state_mgr->getArchetypeWorldOffsets<Agent>();
+        ctx.data().simBridge->agentWorldCounts =
+            state_mgr->getArchetypeWorldCounts<Agent>();
     }
 }
 
@@ -531,14 +535,16 @@ static void setupStepTasks(ma::TaskGraphBuilder &builder,
 
     // Required
     auto clear_tmp = builder.addToGraph<ma::ResetTmpAllocNode>({reward_sys});
-    auto recycle_sys = builder.addToGraph<ma::RecycleEntitiesNode>({clear_tmp});
+
     auto sort_agents = queueSortByWorld<Agent>(
-        builder, {recycle_sys});
+        builder, {clear_tmp});
+
+    auto recycle_sys = builder.addToGraph<ma::RecycleEntitiesNode>({sort_agents});
 
     auto bridge_sync_sys = builder.addToGraph<ma::ParallelForNode<Engine,
         bridgeSyncSystem,
             BridgeSync
-        >>({sort_agents});
+        >>({recycle_sys});
 
     (void)bridge_sync_sys;
 }

@@ -47,12 +47,13 @@ int main(int argc, char **argv)
     ma::render::RenderManager render_mgr = initRenderManager(
         wm.gpuAPIManager().backend(),
         render_gpu.device());
+    *render_mgr.exportedWorldID() = 0;
 
     loadRenderObjects(render_mgr);
 
     Manager::Config cfg = {
         .gpuID = 0,
-        .numWorlds = 1,
+        .numWorlds = 3,
         .randSeed = 0,
         .sensorSize = 32,
         .numAgentsPerWorld = 2,
@@ -124,6 +125,7 @@ int main(int argc, char **argv)
     };
 
     uint32_t inspecting_agent_idx = 0;
+    uint32_t inspecting_world_idx = 0;
 
     viewer.loop(
         // Function for controling input that affects the whole world
@@ -145,11 +147,13 @@ int main(int argc, char **argv)
             if (input.keyPressed(Key::Space)) shoot = 1;
 
             // For now, we only control the agent of the first world.
-            mgr.setAction(agent_idx, forward, backward, rotate, shoot);
+            mgr.setAction(agent_idx + mgr.agentOffsetForWorld(world_idx), 
+                          forward, backward, rotate, shoot);
 
             // viz_sensor(agent_idx);
 
             inspecting_agent_idx = agent_idx;
+            inspecting_world_idx = world_idx;
         }, 
         // Function for controlling what happens during a step
         [&]() {
@@ -169,7 +173,10 @@ int main(int argc, char **argv)
 
             uint8_t *sensor_tensor = (uint8_t *)(mgr.sensorTensor().devicePtr());
 
-            cudaMemcpy(print_ptr, sensor_tensor + inspecting_agent_idx * num_bytes,
+            uint32_t global_agent_idx = mgr.agentOffsetForWorld(inspecting_world_idx) +
+                                        inspecting_agent_idx;
+
+            cudaMemcpy(print_ptr, sensor_tensor + global_agent_idx * num_bytes,
                     num_bytes,
                     cudaMemcpyDeviceToHost);
 

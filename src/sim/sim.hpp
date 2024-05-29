@@ -42,6 +42,8 @@ enum class SimObject : uint32_t {
 // This is the bridge between the simulator and the Python exporter.
 struct SimBridge {
     uint32_t totalNumAgents;
+    int32_t *agentWorldOffsets;
+    int32_t *agentWorldCounts;
 };
 
 struct Sim : ma::WorldBase {
