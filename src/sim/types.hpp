@@ -10,6 +10,8 @@ namespace ma = madrona;
 
 namespace mbots {
 
+class Engine;
+
 struct WorldReset {
     int32_t reset;
 };
@@ -36,6 +38,18 @@ enum class AgentType {
     NumAgentTypes
 };
 
+struct FoodPackage {
+    ma::AtomicU32 numFood;
+
+    // For visualization purposes.
+    ma::Entity foodEntity;
+
+    uint8_t x, y;
+
+    // Returns whether consumption was successful
+    inline bool consume(Engine &ctx);
+};
+
 // Each center of the chunk stores some amount of information about how many
 // entities are within that chunk, what they velocities are, etc...
 //
@@ -44,6 +58,8 @@ enum class AgentType {
 struct ChunkInfo {
     // Each chunk is 16 cells wide.
     static constexpr uint32_t kChunkWidth = 16;
+    static constexpr uint32_t kMaxFoodPackages = 5;
+    static constexpr uint32_t kMaxFoodPerPackage = 1;
 
     ma::AtomicU32 numAgents;
 
@@ -58,8 +74,14 @@ struct ChunkInfo {
 
     ma::math::Vector2 chunkCoord;
 
+    // We are going to change the way food is handled.
+    // Each chunk can have at most `kMaxFoodPackages` packages of food.
+    FoodPackage foodPackages[kMaxFoodPackages];
+
+#if 0
     // Contains food data (or whatever other data we might need to store).
     uint8_t data[kChunkWidth * kChunkWidth];
+#endif
 };
 
 struct ChunkInfoArchetype : ma::Archetype<

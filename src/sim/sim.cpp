@@ -61,8 +61,11 @@ void Sim::registerTypes(ma::ECSRegistry &registry, const Config &cfg)
     registry.exportColumn<Agent, Done>(
         (uint32_t)ExportID::Done);
     registry.exportColumn<ma::render::RaycastOutputArchetype,
-        ma::render::RenderOutputBuffer>(
-            (uint32_t)ExportID::Sensor);
+        ma::render::SemanticOutputBuffer>(
+            (uint32_t)ExportID::SensorSemantic);
+    registry.exportColumn<ma::render::RaycastOutputArchetype,
+        ma::render::SemanticOutputBuffer>(
+            (uint32_t)ExportID::SensorDepth);
     registry.exportColumn<Agent, SensorOutputIndex>(
             (uint32_t)ExportID::SensorIndex);
 }
@@ -162,7 +165,7 @@ static inline void initWorld(Engine &ctx,
             ctx.get<Health>(entity).v = 100;
             ctx.get<HealthAccumulator>(entity).v.store_relaxed(100);
 
-            ctx.get<Species>(entity).speciesID = x;
+            ctx.get<Species>(entity).speciesID = x + 1;
         }
     }
 
@@ -185,8 +188,16 @@ inline void initializeChunks(Engine &ctx,
     chunk_info.chunkCoord.x = linear_idx % ctx.data().numChunksX;
     chunk_info.chunkCoord.y = linear_idx / ctx.data().numChunksX;
 
+    for (int i = 0; i < ChunkInfo::kMaxFoodPackages; ++i) {
+        chunk_info.foodPackages[i].numFood.store_relaxed(0);
+        chunk_info.foodPackages[i].x = 0;
+        chunk_info.foodPackages[i].y = 0;
+    }
+
+#if 0
     memset(chunk_info.data, 0, 
            sizeof(uint8_t) * ChunkInfo::kChunkWidth * ChunkInfo::kChunkWidth);
+#endif
 }
 
 inline void resetSystem(Engine &ctx, WorldReset &reset)
@@ -201,36 +212,53 @@ inline bool addFoodToChunk(Engine &ctx,
     uint32_t rand_x = ctx.data().rng.sampleI32(0, ChunkInfo::kChunkWidth);
     uint32_t rand_y = ctx.data().rng.sampleI32(0, ChunkInfo::kChunkWidth);
 
-    if (chunk_info.data[rand_x + rand_y * ChunkInfo::kChunkWidth] < 255) {
-        chunk_info.data[rand_x + rand_y * ChunkInfo::kChunkWidth]++;
+    for (int i = 0; i < ChunkInfo::kMaxFoodPackages; ++i) {
+        FoodPackage &food_pkg = chunk_info.foodPackages[i];
 
-        ctx.data().currentNumFood.fetch_add_relaxed(1);
+        // If this food package has nothing, 
+        if (food_pkg.numFood.load_relaxed() == 0) {
+            uint32_t rand_x = ctx.data().rng.sampleI32(
+                    0, ChunkInfo::kChunkWidth);
+            uint32_t rand_y = ctx.data().rng.sampleI32(
+                    0, ChunkInfo::kChunkWidth);
 
-        { // For visualization purposes, we also add a food entity
-            auto food_ent = ctx.makeRenderableEntity<StaticObject>();
+            food_pkg.x = rand_x;
+            food_pkg.y = rand_y;
 
-            ctx.get<ma::base::Position>(food_ent) = ma::math::Vector3 {
-                ((float)rand_x + chunk_info.chunkCoord.x * ChunkInfo::kChunkWidth),
-                ((float)rand_y + chunk_info.chunkCoord.y * ChunkInfo::kChunkWidth),
-                0.f
-            } * ctx.data().cellDim;
+            food_pkg.numFood.store_relaxed(1);
 
-            ctx.get<ma::base::Rotation>(food_ent) = 
-                ma::math::Quat::angleAxis(
-                        2.f * ma::math::pi * ctx.data().rng.sampleUniform(),
-                        ma::math::Vector3{ 0.f, 0.f, 1.f });
+            { // For visualization purposes, we also add a food entity
+                auto food_ent = ctx.makeRenderableEntity<StaticObject>();
 
-            ctx.get<ma::base::Scale>(food_ent) = ma::math::Diag3x3{
-                1.f, 1.f, 1.f
-            };
+                ctx.get<ma::base::Position>(food_ent) = ma::math::Vector3 {
+                    ((float)rand_x + chunk_info.chunkCoord.x * ChunkInfo::kChunkWidth),
+                    ((float)rand_y + chunk_info.chunkCoord.y * ChunkInfo::kChunkWidth),
+                    1.f
+                } * ctx.data().cellDim;
 
-            ctx.get<ma::base::ObjectID>(food_ent).idx = (int32_t)SimObject::Food;
+                ctx.get<ma::base::Rotation>(food_ent) = 
+                    ma::math::Quat::angleAxis(
+                            2.f * ma::math::pi * ctx.data().rng.sampleUniform(),
+                            ma::math::Vector3{ 0.f, 0.f, 1.f });
+
+                ctx.get<ma::base::Scale>(food_ent) = ma::math::Diag3x3{
+                    1.f, 1.f, 1.f
+                };
+
+                ctx.get<ma::base::ObjectID>(food_ent).idx = (int32_t)SimObject::Food;
+
+                food_pkg.foodEntity = food_ent;
+            }
+
+            // Only break if we add a NEW food item.
+            return true;
+        } else if (food_pkg.numFood.load_relaxed() < 
+                ChunkInfo::kMaxFoodPerPackage) {
+            food_pkg.numFood.fetch_add_relaxed(1);
         }
-
-        return true;
-    } else {
-        return false;
     }
+
+    return false;
 }
 
 inline void addFoodSystem(Engine &ctx,
@@ -252,7 +280,9 @@ inline void addFoodSystem(Engine &ctx,
 
             ChunkInfo *chunk_info = ctx.data().getChunkInfo(ctx, linear_idx);
 
-            addFoodToChunk(ctx, *chunk_info);
+            if (addFoodToChunk(ctx, *chunk_info)) {
+                ctx.data().currentNumFood.fetch_add_relaxed(1);
+            }
         }
     }
 }
@@ -356,12 +386,41 @@ inline void actionSystem(Engine &ctx,
     chunk_info->totalSpeed.fetch_add_relaxed((uint32_t)(delta_pos_len*2.f));
 }
 
+// This also takes care of eating food
 inline void healthSync(Engine &ctx,
                        ma::Entity e,
+                       ma::base::Position &pos,
                        Health &health,
                        HealthAccumulator &health_accum)
 {
     health.v = health_accum.v.load_relaxed();
+
+    { // See whether or not we ate food.
+        ma::math::Vector2 cell_pos = pos.xy() / ctx.data().cellDim;
+        ma::math::Vector2 chcoord = cell_pos / (float)ChunkInfo::kChunkWidth;
+
+        // Get the x,y cell of inside the chunk
+        uint8_t x = ChunkInfo::kChunkWidth * (chcoord.x - std::floor(chcoord.x));
+        uint8_t y = ChunkInfo::kChunkWidth * (chcoord.y - std::floor(chcoord.y));
+
+        int32_t chindex = ctx.data().getChunkIndex(chcoord);
+
+        ChunkInfo *chinfo = ctx.data().getChunkInfo(ctx, chindex);
+
+        // Loop through all food packages in the chunk check overlap
+        for (int i = 0; i < ChunkInfo::kMaxFoodPackages; ++i) {
+            FoodPackage &food_pkg = chinfo->foodPackages[i];
+
+            if (food_pkg.x == x && food_pkg.y == y) {
+                // If we managed to consume, break and update health
+                if (food_pkg.consume(ctx)) {
+                    health.v += 20.f;
+
+                    break;
+                }
+            }
+        }
+    }
 
     if (health.v <= 0) {
         // Destroy myself!
@@ -507,15 +566,22 @@ inline void updateObservations(Engine &ctx,
 }
 
 inline void updateSensorOutputIdx(Engine &ctx,
+                                  Species &species,
                                   AgentObservationBridge bridge,
                                   SensorOutputIndex &output_idx,
-                                  ma::render::RenderCamera &cam)
+                                  ma::render::RenderCamera &cam,
+                                  ma::render::Renderable &renderable)
 {
     uint32_t row_idx = ctx.loc(bridge.obsEntity).row;
+
     ctx.get<ma::render::PerspectiveCameraData>(
             cam.cameraEntity).rowIDX = row_idx;
 
     output_idx.idx = row_idx;
+
+    // Update the species index too
+    ctx.get<ma::render::InstanceData>(
+            renderable.renderEntity).speciesIDX = species.speciesID;
 }
 
 inline void bridgeSyncSystem(Engine &ctx,
@@ -574,6 +640,7 @@ static void setupStepTasks(ma::TaskGraphBuilder &builder,
     auto health_sync_sys = builder.addToGraph<ma::ParallelForNode<Engine,
         healthSync,
             ma::Entity,
+            ma::base::Position,
             Health,
             HealthAccumulator,
         >>({action_sys});
@@ -620,9 +687,11 @@ static void setupStepTasks(ma::TaskGraphBuilder &builder,
     // After the sort, we update the perspective camera data row idx output index
     auto update_sensor_idx = builder.addToGraph<ma::ParallelForNode<Engine,
         updateSensorOutputIdx,
+            Species,
             AgentObservationBridge,
             SensorOutputIndex,
-            ma::render::RenderCamera
+            ma::render::RenderCamera,
+            ma::render::Renderable
         >>({sort_obs});
 
     auto bridge_sync_sys = builder.addToGraph<ma::ParallelForNode<Engine,

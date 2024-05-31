@@ -25,7 +25,13 @@ public:
 
     std::vector<uint32_t> speciesOffsets() const;
 
-    ma::py::Tensor sensorTensor() const;
+    // This returns the semantic information that the agent sees.
+    ma::py::Tensor semanticTensor() const;
+
+    // This returns the depth information that the agent sees.
+    ma::py::Tensor depthTensor() const;
+
+    // due to indirection, we need to also return the indices of these images.
     ma::py::Tensor sensorIndexTensor() const;
 
     // One reward per species.

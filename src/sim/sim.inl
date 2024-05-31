@@ -73,4 +73,29 @@ inline ChunkInfo *Sim::getChunkInfo(Engine &ctx, int32_t chunk_idx)
     return &ctx.get<ChunkInfo>(loc);
 }
 
+inline bool FoodPackage::consume(Engine &ctx)
+{
+    uint32_t prev_value = numFood.load_relaxed();
+
+    if (prev_value == 0)
+        return false;
+
+    bool success = numFood.compare_exchange_weak<
+            ma::sync::memory_order::relaxed,
+            ma::sync::memory_order::relaxed
+        >(prev_value, prev_value - 1);
+
+    if (success) {
+        if (prev_value - 1 == 0) {
+            // Now, there is no more food here!
+            ctx.destroyRenderableEntity(foodEntity);
+            ctx.data().currentNumFood.fetch_add_relaxed(-1);
+        }
+
+        return true;
+    } else {
+        return false;
+    }
+}
+
 }

@@ -20,7 +20,8 @@ enum class ExportID : uint32_t {
     Action,
     Reward,
     Done,
-    Sensor,
+    SensorSemantic,
+    SensorDepth,
     SensorIndex,
     NumExports
 };
@@ -119,7 +120,7 @@ struct Sim : ma::WorldBase {
 
     uint32_t totalAllowedFood;
 
-    ma::AtomicU32 currentNumFood;
+    ma::AtomicI32 currentNumFood;
 };
 
 class Engine : public ::ma::CustomContext<Engine, Sim> {
