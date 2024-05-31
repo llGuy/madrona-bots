@@ -218,3 +218,58 @@ uint32_t Manager::agentOffsetForWorld(uint32_t world_idx)
 {
     return impl_->agentWorldOffsets[world_idx];
 }
+
+std::vector<uint32_t> Manager::speciesOffsets() const
+{
+    return { 0, 5, 12, 42, 69 };
+}
+
+// One reward per species.
+ma::py::Tensor Manager::rewardTensor() const
+{
+    return ma::py::Tensor(
+            nullptr,
+            ma::py::TensorElementType::Int32,
+            { 1 },
+            0);
+}
+
+ma::py::Tensor Manager::positionTensor() const
+{
+    
+    return ma::py::Tensor(
+            nullptr,
+            ma::py::TensorElementType::Int32,
+            { 1 },
+            0);
+}
+
+ma::py::Tensor Manager::healthTensor() const
+{
+    
+    return ma::py::Tensor(
+            nullptr,
+            ma::py::TensorElementType::Int32,
+            { 1 },
+            0);
+}
+
+ma::py::Tensor Manager::surroundingTensor() const
+{
+    
+    return ma::py::Tensor(
+            nullptr,
+            ma::py::TensorElementType::Int32,
+            { 1 },
+            0);
+}
+
+ma::py::Tensor Manager::actionTensor() const
+{
+    
+    return ma::py::Tensor(
+            nullptr,
+            ma::py::TensorElementType::Int32,
+            { 1 },
+            0);
+}

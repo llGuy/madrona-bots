@@ -1,5 +1,6 @@
 #include <memory>
 
+#include <vector>
 #include <madrona/py/utils.hpp>
 
 namespace ma = madrona;
@@ -22,8 +23,19 @@ public:
 
     void step();
 
+    std::vector<uint32_t> speciesOffsets() const;
+
     ma::py::Tensor sensorTensor() const;
     ma::py::Tensor sensorIndexTensor() const;
+
+    // One reward per species.
+    ma::py::Tensor rewardTensor() const;
+
+    ma::py::Tensor positionTensor() const;
+    ma::py::Tensor healthTensor() const;
+    ma::py::Tensor surroundingTensor() const;
+
+    ma::py::Tensor actionTensor() const;
 
     void setAction(uint32_t agent_idx,
                    int32_t forward,
