@@ -177,7 +177,7 @@ void Manager::step()
 ma::py::Tensor Manager::semanticTensor() const
 {
     uint32_t pixels_per_view = impl_->cfg.sensorSize;
-    return impl_->exportTensor(mbots::ExportID::SemanticSensor,
+    return impl_->exportTensor(mbots::ExportID::SensorSemantic,
                                ma::py::TensorElementType::Int8,
                                {
                                    impl_->simBridge->totalNumAgents,
@@ -188,7 +188,7 @@ ma::py::Tensor Manager::semanticTensor() const
 ma::py::Tensor Manager::depthTensor() const
 {
     uint32_t pixels_per_view = impl_->cfg.sensorSize;
-    return impl_->exportTensor(mbots::ExportID::DepthSensor,
+    return impl_->exportTensor(mbots::ExportID::SensorDepth,
                                ma::py::TensorElementType::UInt8,
                                {
                                    impl_->simBridge->totalNumAgents,

@@ -23,7 +23,7 @@ int main(int argc, char **argv)
         int64_t num_bytes = cfg.sensorSize;
         uint8_t *print_ptr = (uint8_t *)ma::cu::allocReadback(num_bytes);
 
-        uint8_t *sensor_tensor = (uint8_t *)(mgr.sensorTensor().devicePtr());
+        uint8_t *sensor_tensor = (uint8_t *)(mgr.depthTensor().devicePtr());
 
         cudaMemcpy(print_ptr, sensor_tensor + agent_idx * num_bytes,
                 num_bytes,

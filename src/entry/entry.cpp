@@ -29,7 +29,8 @@ NB_MODULE(madrona_bots, m) {
            nb::arg("rand_seed"),
            nb::arg("sensor_size"))
         .def("step", &Manager::step)
-        .def("sensor_tensor", &Manager::sensorTensor)
+        .def("depth_tensor", &Manager::depthTensor)
+        .def("semantic_tensor", &Manager::semanticTensor)
         .def("reward_tensor", &Manager::rewardTensor)
         .def("position_tensor", &Manager::positionTensor)
         .def("health_tensor", &Manager::healthTensor)

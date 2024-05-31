@@ -7,6 +7,29 @@
 
 namespace ma = madrona;
 
+// Random color table
+static constexpr ImU32 kRandomColorTable[] = {
+    IM_COL32(0, 0, 0, 255),
+    IM_COL32(170, 0, 0, 255),
+    IM_COL32(0, 170, 0, 255),
+    IM_COL32(0, 0, 170, 255),
+    IM_COL32(170, 0, 170, 255),
+    IM_COL32(0, 170, 170, 255),
+    IM_COL32(170, 170, 0, 255),
+    IM_COL32(170, 170, 170, 255),
+    IM_COL32(85, 85, 85, 255),
+    IM_COL32(255, 85, 85, 255),
+    IM_COL32(85, 255, 85, 255),
+    IM_COL32(85, 85, 255, 255),
+    IM_COL32(85, 255, 255, 255),
+    IM_COL32(255, 255, 85, 255),
+    IM_COL32(255, 85, 255, 255),
+    IM_COL32(255, 255, 255, 255)
+};
+
+static constexpr uint32_t kNumRandomColors = sizeof(kRandomColorTable) /
+    sizeof(kRandomColorTable[0]);
+
 // In assets.cpp
 void loadRenderObjects(ma::render::RenderManager &render_mgr);
 
@@ -74,29 +97,13 @@ int main(int argc, char **argv)
         .cameraRotation = initial_camera_rotation,
     });
 
-    [[maybe_unused]] auto viz_sensor = [&mgr, &cfg] (uint32_t agent_idx) {
-        int64_t num_bytes = cfg.sensorSize;
-        uint8_t *print_ptr = (uint8_t *)ma::cu::allocReadback(num_bytes);
-
-        uint8_t *sensor_tensor = (uint8_t *)(mgr.sensorTensor().devicePtr());
-
-        cudaMemcpy(print_ptr, sensor_tensor + agent_idx * num_bytes,
-                num_bytes,
-                cudaMemcpyDeviceToHost);
-
-        for (int i = 0; i < (int)cfg.sensorSize; ++i) {
-            printf("%u  ", print_ptr[i]);
-        }
-
-        printf("\n");
-    };
-
     uint32_t inspecting_agent_idx = 0;
     uint32_t inspecting_world_idx = 0;
 
     // Readback for the sensor information
     int64_t num_bytes = cfg.sensorSize;
-    uint8_t *print_ptr = (uint8_t *)ma::cu::allocReadback(num_bytes);
+    uint8_t *depth_ptr = (uint8_t *)ma::cu::allocReadback(num_bytes);
+    uint8_t *semantic_ptr = (uint8_t *)ma::cu::allocReadback(num_bytes);
 
     uint32_t *sensor_idx_ptr = (uint32_t *)ma::cu::allocReadback(sizeof(uint32_t));
 
@@ -123,8 +130,6 @@ int main(int argc, char **argv)
             mgr.setAction(agent_idx + mgr.agentOffsetForWorld(world_idx), 
                           forward, backward, rotate, shoot);
 
-            // viz_sensor(agent_idx);
-
             inspecting_agent_idx = agent_idx;
             inspecting_world_idx = world_idx;
         }, 
@@ -143,32 +148,37 @@ int main(int argc, char **argv)
 
             uint32_t rt_output_offset = 0;
 
-            uint8_t *sensor_tensor = (uint8_t *)(mgr.sensorTensor().devicePtr());
+            uint8_t *depth_tensor = (uint8_t *)(mgr.depthTensor().devicePtr());
+            int8_t *semantic_tensor = (int8_t *)(mgr.semanticTensor().devicePtr());
+
             uint32_t *sensor_idx_tensor = (uint32_t *)(mgr.sensorIndexTensor().devicePtr());
 
-            uint32_t global_agent_idx = mgr.agentOffsetForWorld(inspecting_world_idx) +
+            int32_t global_agent_idx = mgr.agentOffsetForWorld(inspecting_world_idx) +
                                         inspecting_agent_idx;
 
             cudaMemcpy(sensor_idx_ptr, sensor_idx_tensor + global_agent_idx,
                     sizeof(uint32_t), cudaMemcpyDeviceToHost);
 
-            cudaMemcpy(print_ptr, sensor_tensor + (*sensor_idx_ptr) * num_bytes,
+            cudaMemcpy(depth_ptr, depth_tensor + (*sensor_idx_ptr) * num_bytes,
+                    num_bytes,
+                    cudaMemcpyDeviceToHost);
+
+            cudaMemcpy(semantic_ptr, semantic_tensor + (*sensor_idx_ptr) * num_bytes,
                     num_bytes,
                     cudaMemcpyDeviceToHost);
 
             uint32_t num_forward_rays = 3 * 32 / 4;
             uint32_t num_backward_rays = 1 * 32 / 4;
 
-            ImGui::Text("Raycast output at index %d\n", (int)print_ptr[0]);
-
             auto draw_list = ImGui::GetWindowDrawList();
             ImVec2 window_pos = ImGui::GetWindowPos();
 
+            // Depth information
             for (int i = 0; i < num_forward_rays; ++i) {
                 auto realColor = IM_COL32(
-                        (uint8_t)print_ptr[i],
-                        (uint8_t)print_ptr[i],
-                        (uint8_t)print_ptr[i],
+                        (uint8_t)depth_ptr[i],
+                        (uint8_t)depth_ptr[i],
+                        (uint8_t)depth_ptr[i],
                         255);
 
                 draw_list->AddRectFilled(
@@ -181,10 +191,39 @@ int main(int argc, char **argv)
 
             for (int i = 0; i < num_backward_rays; ++i) {
                 auto realColor = IM_COL32(
-                        (uint8_t)print_ptr[num_forward_rays + i],
-                        (uint8_t)print_ptr[num_forward_rays + i],
-                        (uint8_t)print_ptr[num_forward_rays + i],
+                        (uint8_t)depth_ptr[num_forward_rays + i],
+                        (uint8_t)depth_ptr[num_forward_rays + i],
+                        (uint8_t)depth_ptr[num_forward_rays + i],
                         255);
+
+                draw_list->AddRectFilled(
+                        { ((i) * pix_scale) + window_pos.x, 
+                        ((0) * pix_scale) + window_pos.y + pix_scale + vert_off }, 
+                        { ((i + 1) * pix_scale) + window_pos.x,   
+                        ((1) * pix_scale) + +window_pos.y + pix_scale + vert_off },
+                        realColor, 0, 0);
+            }
+
+            vert_off += pix_scale * 2;
+
+            // Semantic information
+            for (int i = 0; i < num_forward_rays; ++i) {
+                int8_t semantic_info = semantic_ptr[i] + 1;
+
+                auto realColor = kRandomColorTable[semantic_info % kNumRandomColors];
+
+                draw_list->AddRectFilled(
+                        { ((i) * pix_scale) + window_pos.x, 
+                        ((0) * pix_scale) + window_pos.y + vert_off }, 
+                        { ((i + 1) * pix_scale) + window_pos.x,   
+                        ((1) * pix_scale) + +window_pos.y + vert_off },
+                        realColor, 0, 0);
+            }
+
+            for (int i = 0; i < num_backward_rays; ++i) {
+                int8_t semantic_info = semantic_ptr[num_forward_rays + i] + 1;
+
+                auto realColor = kRandomColorTable[semantic_info % kNumRandomColors];
 
                 draw_list->AddRectFilled(
                         { ((i) * pix_scale) + window_pos.x, 
