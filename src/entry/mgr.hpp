@@ -36,6 +36,7 @@ public:
 
     // One reward per species.
     ma::py::Tensor rewardTensor() const;
+    ma::py::Tensor speciesCountTensor() const;
 
     ma::py::Tensor positionTensor() const;
     ma::py::Tensor healthTensor() const;

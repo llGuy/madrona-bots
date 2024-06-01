@@ -33,6 +33,7 @@ NB_MODULE(madrona_bots, m) {
         .def("depth_tensor", &Manager::depthTensor)
         .def("semantic_tensor", &Manager::semanticTensor)
         .def("reward_tensor", &Manager::rewardTensor)
+        .def("species_count_tensor", &Manager::speciesCountTensor)
         .def("position_tensor", &Manager::positionTensor)
         .def("health_tensor", &Manager::healthTensor)
         .def("surrounding_tensor", &Manager::surroundingTensor)

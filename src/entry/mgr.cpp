@@ -247,6 +247,16 @@ ma::py::Tensor Manager::rewardTensor() const
                                });
 }
 
+ma::py::Tensor Manager::speciesCountTensor() const
+{
+    return impl_->exportTensor(mbots::ExportID::Reward,
+                               ma::py::TensorElementType::Int32,
+                               {
+                                   impl_->cfg.numWorlds,
+                                   mbots::kNumSpecies
+                               });
+}
+
 ma::py::Tensor Manager::positionTensor() const
 {
     return impl_->exportTensor(mbots::ExportID::Position,
