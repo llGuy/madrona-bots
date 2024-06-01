@@ -79,7 +79,6 @@ int main(int argc, char **argv)
         .numWorlds = 3,
         .randSeed = 0,
         .sensorSize = 32,
-        .numAgentsPerWorld = 2,
         .renderBridge = (void *)render_mgr.bridge()
     };
 

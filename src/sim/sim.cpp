@@ -43,6 +43,10 @@ void Sim::registerTypes(ma::ECSRegistry &registry, const Config &cfg)
     registry.registerComponent<AgentObservationBridge>();
     registry.registerComponent<SensorOutputIndex>();
 
+    registry.registerComponent<SpeciesInfoTracker>();
+    registry.registerComponent<SpeciesCount>();
+    registry.registerComponent<SpeciesReward>();
+
     registry.registerSingleton<WorldReset>();
     registry.registerSingleton<BridgeSync>();
     registry.registerSingleton<AddFoodSingleton>();
@@ -51,6 +55,7 @@ void Sim::registerTypes(ma::ECSRegistry &registry, const Config &cfg)
     registry.registerArchetype<StaticObject>();
     registry.registerArchetype<ChunkInfoArchetype>();
     registry.registerArchetype<AgentObservationArchetype>();
+    registry.registerArchetype<SpeciesInfoArchetype>();
 
     registry.exportSingleton<WorldReset>(
         (uint32_t)ExportID::Reset);
@@ -60,14 +65,21 @@ void Sim::registerTypes(ma::ECSRegistry &registry, const Config &cfg)
         (uint32_t)ExportID::Reward);
     registry.exportColumn<Agent, Done>(
         (uint32_t)ExportID::Done);
+
     registry.exportColumn<ma::render::RaycastOutputArchetype,
         ma::render::SemanticOutputBuffer>(
             (uint32_t)ExportID::SensorSemantic);
     registry.exportColumn<ma::render::RaycastOutputArchetype,
         ma::render::SemanticOutputBuffer>(
             (uint32_t)ExportID::SensorDepth);
+
     registry.exportColumn<Agent, SensorOutputIndex>(
             (uint32_t)ExportID::SensorIndex);
+
+    registry.exportColumn<SpeciesInfoArchetype, SpeciesCount>(
+            (uint32_t)ExportID::SpeciesCount);
+    registry.exportColumn<SpeciesInfoArchetype, SpeciesReward>(
+            (uint32_t)ExportID::SpeciesReward);
 }
 
 static inline void makeFloorPlane(Engine &ctx,
@@ -171,8 +183,8 @@ static inline void initWorld(Engine &ctx,
     makeFloorPlane(ctx, num_chunks_x, num_chunks_y);
     makeWalls(ctx, num_chunks_x, num_chunks_y);
 
-    for (int y = 0; y < 5; ++y) {
-        for (int x = 0; x < 5; ++x) {
+    for (int y = 0; y < 4; ++y) {
+        for (int x = 0; x < 4; ++x) {
             auto entity = makeAgent(
                     ctx,
                     ma::math::Vector3{ 3.f + x * 10.f, 3.f + y * 10.f, 1.f },
@@ -187,6 +199,17 @@ static inline void initWorld(Engine &ctx,
             num_chunks_x * num_chunks_y);
 
     ctx.data().chunksLoc = loc;
+
+
+
+    auto species_tracker = ctx.makeEntity<SpeciesInfoArchetype>();
+
+    for (int i = 0; i < kNumSpecies; ++i) {
+        ctx.get<SpeciesInfoTracker>(species_tracker).countTracker[i].store_relaxed(0);
+        ctx.get<SpeciesInfoTracker>(species_tracker).healthTracker[i].store_relaxed(0);
+    }
+
+    ctx.data().speciesInfoTracker = species_tracker;
 }
 
 inline void initializeChunks(Engine &ctx,
@@ -472,6 +495,8 @@ inline void healthSync(Engine &ctx,
 
         LOG("Entity({}, {}) has been destroyed!\n", e.gen, e.id);
     }
+
+    health_accum.v.store_relaxed(health.v);
 }
 
 inline void updateSurroundingObservation(Engine &ctx,
@@ -613,7 +638,8 @@ inline void updateSensorOutputIdx(Engine &ctx,
                                   AgentObservationBridge bridge,
                                   SensorOutputIndex &output_idx,
                                   ma::render::RenderCamera &cam,
-                                  ma::render::Renderable &renderable)
+                                  ma::render::Renderable &renderable,
+                                  Health &health)
 {
     uint32_t row_idx = ctx.loc(bridge.obsEntity).row;
 
@@ -625,6 +651,48 @@ inline void updateSensorOutputIdx(Engine &ctx,
     // Update the species index too
     ctx.get<ma::render::InstanceData>(
             renderable.renderEntity).speciesIDX = species.speciesID;
+
+
+
+    // Update the number of agents in given species
+    auto species_tracker = ctx.data().speciesInfoTracker;
+
+    auto &info_tracker = ctx.get<SpeciesInfoTracker>(species_tracker);
+
+    info_tracker.countTracker[species.speciesID-1].fetch_add_relaxed(1);
+    info_tracker.healthTracker[species.speciesID-1].fetch_add_relaxed(health.v);
+}
+
+inline void speciesInfoSync(Engine &ctx,
+                            SpeciesInfoTracker &tracker,
+                            SpeciesCount &counts,
+                            SpeciesReward &rewards)
+{
+    for (int i = 0; i < kNumSpecies; ++i) {
+        uint32_t count = tracker.countTracker[i].load_relaxed();
+        uint32_t total_health = tracker.healthTracker[i].load_relaxed();
+
+        float health_avg = (float)total_health / (float)count;
+        if (count == 0) {
+            health_avg = 0;
+        }
+
+        counts.counts[i] = count;
+        
+        // (100 is the starting health of all agents)
+        rewards.rewards[i] = (float)count / 256.0f +
+                             health_avg / 100.0f;
+
+        LOG("World={}; Species={}; Count={}; HealthAvg={}; Reward={}\n",
+                ctx.worldID().idx,
+                i,
+                count,
+                health_avg,
+                rewards.rewards[i]);
+
+        tracker.countTracker[i].store_relaxed(0);
+        tracker.healthTracker[i].store_relaxed(0);
+    }
 }
 
 inline void bridgeSyncSystem(Engine &ctx,
@@ -737,13 +805,24 @@ static void setupStepTasks(ma::TaskGraphBuilder &builder,
             AgentObservationBridge,
             SensorOutputIndex,
             ma::render::RenderCamera,
-            ma::render::Renderable
+            ma::render::Renderable,
+            Health
         >>({sort_obs});
+
+    auto species_info_sys = builder.addToGraph<ma::ParallelForNode<Engine,
+         speciesInfoSync,
+            SpeciesInfoTracker,
+            SpeciesCount,
+            SpeciesReward
+        >>({update_sensor_idx});
+
+    auto sort_species = queueSortByWorld<SpeciesInfoArchetype>(
+            builder, {species_info_sys});
 
     auto bridge_sync_sys = builder.addToGraph<ma::ParallelForNode<Engine,
         bridgeSyncSystem,
             BridgeSync
-        >>({update_sensor_idx});
+        >>({sort_species});
 
     (void)bridge_sync_sys;
 }

@@ -10,6 +10,8 @@ namespace ma = madrona;
 
 namespace mbots {
 
+inline constexpr uint32_t kNumSpecies = 4;
+
 class Engine;
 
 struct WorldReset {
@@ -142,6 +144,26 @@ struct AgentObservationBridge {
 struct SensorOutputIndex {
     uint32_t idx;
 };
+
+struct SpeciesInfoTracker {
+    ma::AtomicU32 countTracker[kNumSpecies];
+    ma::AtomicU32 healthTracker[kNumSpecies];
+};
+
+struct SpeciesCount {
+    uint32_t counts[kNumSpecies];
+};
+
+struct SpeciesReward {
+    float rewards[kNumSpecies];
+};
+
+// We just need to create one of these per world
+struct SpeciesInfoArchetype : ma::Archetype<
+    SpeciesInfoTracker,
+    SpeciesCount,
+    SpeciesReward
+> {};
 
 struct Agent : ma::Archetype<
     ma::base::Position,

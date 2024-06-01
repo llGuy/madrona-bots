@@ -11,7 +11,6 @@ int main(int argc, char **argv)
         .numWorlds = 1,
         .randSeed = 0,
         .sensorSize = 32,
-        .numAgentsPerWorld = 2,
     };
 
     Manager mgr(cfg);

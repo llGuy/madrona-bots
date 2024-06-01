@@ -23,6 +23,10 @@ enum class ExportID : uint32_t {
     SensorSemantic,
     SensorDepth,
     SensorIndex,
+
+    SpeciesCount,
+    SpeciesReward,
+
     NumExports
 };
 
@@ -95,7 +99,6 @@ struct Sim : ma::WorldBase {
     inline ChunkInfo *getChunkInfo(Engine &ctx, int32_t chunk_idx);
 
 
-
     uint32_t curWorldEpisode;
 
     // The base random key that episode random keys are split off of
@@ -121,6 +124,8 @@ struct Sim : ma::WorldBase {
     uint32_t totalAllowedFood;
 
     ma::AtomicI32 currentNumFood;
+
+    ma::Entity speciesInfoTracker;
 };
 
 class Engine : public ::ma::CustomContext<Engine, Sim> {
