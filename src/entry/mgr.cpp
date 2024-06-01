@@ -124,9 +124,13 @@ Manager::Impl *Manager::Impl::make(const Config &mgr_cfg)
         .nearSphere = 1.1f,
     };
 
+    const char *user_srcs[] = {
+        MBOTS_SRC_LIST
+    };
+
     ma::CompileConfig compile_cfg = {
         // Defined by the build system
-        .userSources = { MBOTS_SRC_LIST },
+        .userSources = ma::Span(user_srcs, 1),
         .userCompileFlags = { MBOTS_COMPILE_FLAGS },
         .optMode = ma::CompileConfig::OptMode::LTO
     };
@@ -249,7 +253,7 @@ ma::py::Tensor Manager::rewardTensor() const
 
 ma::py::Tensor Manager::speciesCountTensor() const
 {
-    return impl_->exportTensor(mbots::ExportID::Reward,
+    return impl_->exportTensor(mbots::ExportID::SpeciesCount,
                                ma::py::TensorElementType::Int32,
                                {
                                    impl_->cfg.numWorlds,
