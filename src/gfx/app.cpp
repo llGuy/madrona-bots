@@ -119,16 +119,20 @@ int main(int argc, char **argv)
                               const ma::viz::Viewer::UserInput &input) {
             using Key = ma::viz::Viewer::KeyboardKey;
 
-            int32_t forward = 0, backward = 0, rotate = 0, shoot = 0;
+            int32_t forward = 0, backward = 0, 
+                    rotate_left = 0, rotate_right = 0,
+                    shoot = 0, breed = 0;
 
             if (input.keyPressed(Key::W)) forward = 1;
             if (input.keyPressed(Key::S)) backward = 1;
-            if (input.keyPressed(Key::R)) rotate = 1;
+            if (input.keyPressed(Key::R)) rotate_left = 1;
+            if (input.keyPressed(Key::F)) rotate_right = 1;
             if (input.keyPressed(Key::Space)) shoot = 1;
+            if (input.keyPressed(Key::Q)) breed = 1;
 
             // For now, we only control the agent of the first world.
             mgr.setAction(agent_idx + mgr.agentOffsetForWorld(world_idx), 
-                          forward, backward, rotate, shoot);
+                          forward, backward, rotate_left, rotate_right, shoot, breed);
 
             inspecting_agent_idx = agent_idx;
             inspecting_world_idx = world_idx;

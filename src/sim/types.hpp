@@ -20,8 +20,13 @@ struct Action {
     // Whatever the actions may be
     int32_t forward;
     int32_t backward;
-    int32_t rotate;
+    int32_t rotateLeft;
+    int32_t rotateRight;
     int32_t shoot;
+
+    // Breeding can only happen if the agent has more than 60 health because
+    // breeding will cause one of the agents to lose 40 health.
+    int32_t breed;
 };
 
 struct Reward {

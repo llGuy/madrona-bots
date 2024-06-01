@@ -46,8 +46,10 @@ public:
     void setAction(uint32_t agent_idx,
                    int32_t forward,
                    int32_t backward,
-                   int32_t rotate,
-                   int32_t shoot);
+                   int32_t rotateLeft,
+                   int32_t rotateRight,
+                   int32_t shoot,
+                   int32_t breed);
 
     uint32_t agentOffsetForWorld(uint32_t world_idx);
 

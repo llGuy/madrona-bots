@@ -130,6 +130,40 @@ static inline void makeWalls(Engine &ctx,
     }
 }
 
+static inline ma::Entity makeAgent(Engine &ctx,
+                                   const ma::math::Vector3 &pos,
+                                   uint32_t species_id,
+                                   uint32_t initial_health)
+{
+    auto entity = ctx.makeAgent();
+
+    // Initialize the entities with some positions
+    ctx.get<ma::base::Position>(entity) = pos;
+
+    ctx.get<ma::base::Rotation>(entity) =
+        ma::math::Quat::angleAxis(0.f, ma::math::Vector3{0.f, 0.f, 1.f});
+
+    ctx.get<ma::base::Scale>(entity) = ma::math::Diag3x3{
+        1.f, 1.f, 1.f
+    };
+
+    ctx.get<ma::base::ObjectID>(entity).idx = (int32_t)SimObject::Agent;
+
+    // Attach a view to this entity so that sensor data gets generated
+    // for it.
+    ma::render::RenderingSystem::attachEntityToView(
+            ctx, entity, 90.f, 0.1f, { 0.f, 0.f, 0.f });
+
+    ctx.get<AgentType>(entity) = AgentType::Carnivore;
+
+    ctx.get<Health>(entity).v = initial_health;
+    ctx.get<HealthAccumulator>(entity).v.store_relaxed(initial_health);
+
+    ctx.get<Species>(entity).speciesID = species_id;
+
+    return entity;
+}
+
 static inline void initWorld(Engine &ctx,
                              uint32_t num_chunks_x,
                              uint32_t num_chunks_y)
@@ -139,33 +173,13 @@ static inline void initWorld(Engine &ctx,
 
     for (int y = 0; y < 5; ++y) {
         for (int x = 0; x < 5; ++x) {
-            auto entity = ctx.makeAgent();
+            auto entity = makeAgent(
+                    ctx,
+                    ma::math::Vector3{ 3.f + x * 10.f, 3.f + y * 10.f, 1.f },
+                    x + 1,
+                    100);
 
-            // Initialize the entities with some positions
-            ctx.get<ma::base::Position>(entity) = ma::math::Vector3{
-                3.f + x * 10.f, 3.f + y * 10.f, 1.f
-            };
-
-            ctx.get<ma::base::Rotation>(entity) =
-                ma::math::Quat::angleAxis(0.f, ma::math::Vector3{0.f, 0.f, 1.f});
-
-            ctx.get<ma::base::Scale>(entity) = ma::math::Diag3x3{
-                1.f, 1.f, 1.f
-            };
-
-            ctx.get<ma::base::ObjectID>(entity).idx = (int32_t)SimObject::Agent;
-
-            // Attach a view to this entity so that sensor data gets generated
-            // for it.
-            ma::render::RenderingSystem::attachEntityToView(
-                    ctx, entity, 90.f, 0.1f, { 0.f, 0.f, 0.f });
-
-            ctx.get<AgentType>(entity) = AgentType::Carnivore;
-
-            ctx.get<Health>(entity).v = 100;
-            ctx.get<HealthAccumulator>(entity).v.store_relaxed(100);
-
-            ctx.get<Species>(entity).speciesID = x + 1;
+            (void)entity;
         }
     }
 
@@ -341,9 +355,12 @@ inline void actionSystem(Engine &ctx,
         }
     }
 
-    if (action.rotate) {
+    if (action.rotateLeft) {
         rot *= ma::math::Quat::angleAxis(
                 0.1f, ma::math::Vector3{ 0.f, 0.f, 1.f });
+    } else if (action.rotateRight) {
+        rot *= ma::math::Quat::angleAxis(
+                -0.1f, ma::math::Vector3{ 0.f, 0.f, 1.f });
     }
 
     ma::math::Vector3 old_pos = pos;
@@ -391,7 +408,10 @@ inline void healthSync(Engine &ctx,
                        ma::Entity e,
                        ma::base::Position &pos,
                        Health &health,
-                       HealthAccumulator &health_accum)
+                       HealthAccumulator &health_accum,
+                       Action &action,
+                       Species &species,
+                       ma::render::RenderCamera &camera)
 {
     health.v = health_accum.v.load_relaxed();
 
@@ -418,6 +438,29 @@ inline void healthSync(Engine &ctx,
 
                     break;
                 }
+            }
+        }
+    }
+
+    // If you choose to breed, you lose 40 health points
+    if (action.breed && health.v > 60) {
+        ma::render::FinderOutput *finder_output = 
+            (ma::render::FinderOutput *)
+                ma::render::RenderingSystem::getRenderOutput<
+                ma::render::FinderOutputBuffer>(
+                        ctx, camera, sizeof(ma::render::FinderOutput));
+
+        if (finder_output->hitEntity != ma::Entity::none()) {
+            // Make sure that this entity is part of our species
+            if (ctx.get<Species>(finder_output->hitEntity).speciesID ==
+                    species.speciesID) {
+                health.v -= 40;
+
+                // Make a new entity which starts at 50 health.
+                auto entity = makeAgent(ctx, 
+                                        ma::math::Vector3{pos.x, pos.y, pos.z},
+                                        species.speciesID,
+                                        50);
             }
         }
     }
@@ -643,6 +686,9 @@ static void setupStepTasks(ma::TaskGraphBuilder &builder,
             ma::base::Position,
             Health,
             HealthAccumulator,
+            Action,
+            Species,
+            ma::render::RenderCamera
         >>({action_sys});
 
     auto update_surrounding_obs_sys = builder.addToGraph<ma::ParallelForNode<Engine,

@@ -47,22 +47,26 @@ int main(int argc, char **argv)
         for (int i = 0; i < (int)strlen(action_desc_buffer)-1; ++i) {
             char act = action_desc_buffer[i];
 
-            int32_t forward = 0, backward = 0, rotate = 0, shoot = 0;
+            int32_t forward = 0, backward = 0, rotate_left = 0, rotate_right, shoot = 0;
 
             switch (act) {
-            case 'f': {
+            case 'w': {
                 forward = 1;
             } break;
 
-            case 'b': {
+            case 's': {
                 backward = 1;
             } break;
 
             case 'r': {
-                rotate = 1;
+                rotate_left = 1;
             } break;
 
-            case 's': {
+            case 'f': {
+                rotate_right = 1;
+            } break;
+
+            case ' ': {
                 shoot = 1;
             } break;
 
@@ -70,7 +74,7 @@ int main(int argc, char **argv)
             } break;
             }
 
-            mgr.setAction(0, forward, backward, rotate, shoot);
+            mgr.setAction(0, forward, backward, rotate_left, rotate_right, shoot, 0);
 
             mgr.step();
 

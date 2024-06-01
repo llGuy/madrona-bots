@@ -209,14 +209,18 @@ ma::py::Tensor Manager::sensorIndexTensor() const
 void Manager::setAction(uint32_t agent_idx,
                         int32_t forward,
                         int32_t backward,
-                        int32_t rotate,
-                        int32_t shoot)
+                        int32_t rotate_left,
+                        int32_t rotate_right,
+                        int32_t shoot,
+                        int32_t breed)
 {
     mbots::Action action = {
         .forward = forward,
         .backward = backward,
-        .rotate = rotate,
-        .shoot = shoot
+        .rotateLeft = rotate_left,
+        .rotateRight = rotate_right,
+        .shoot = shoot,
+        .breed = breed
     };
 
     auto *action_ptr = impl_->actionBuffer + agent_idx;
