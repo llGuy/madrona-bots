@@ -62,6 +62,7 @@ target_link_libraries(madrona_bots PRIVATE
 add_executable(madrona_bots_app
     gfx/app.cpp
     gfx/assets.cpp
+    gfx/gfx.cpp
 )
 
 target_link_libraries(madrona_bots_app PRIVATE

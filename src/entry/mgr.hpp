@@ -1,3 +1,5 @@
+#pragma once
+
 #include <memory>
 
 #include <vector>
@@ -21,7 +23,7 @@ public:
     };
 
     Manager(const Config &cfg);
-    ~Manager();
+    virtual ~Manager();
 
     void step();
 
