@@ -20,6 +20,11 @@ enum class ExportID : uint32_t {
     Action,
     Reward,
     Done,
+
+    Position,
+    Health,
+    Surrounding,
+
     SensorSemantic,
     SensorDepth,
     SensorIndex,
@@ -67,6 +72,8 @@ struct Sim : ma::WorldBase {
         SimBridge *simBridge;
 
         uint32_t totalAllowedFood;
+
+        uint32_t initNumAgentsPerWorld;
     };
 
     // Per-world configuration - not needed for now.

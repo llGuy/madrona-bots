@@ -59,8 +59,16 @@ void Sim::registerTypes(ma::ECSRegistry &registry, const Config &cfg)
 
     registry.exportSingleton<WorldReset>(
         (uint32_t)ExportID::Reset);
-    registry.exportColumn<Agent, Action>(
+
+    registry.exportColumn<AgentObservationArchetype, PositionObservation>(
+        (uint32_t)ExportID::Position);
+    registry.exportColumn<AgentObservationArchetype, Action>(
         (uint32_t)ExportID::Action);
+    registry.exportColumn<AgentObservationArchetype, SurroundingObservation>(
+        (uint32_t)ExportID::Surrounding);
+    registry.exportColumn<AgentObservationArchetype, HealthObservation>(
+        (uint32_t)ExportID::Health);
+
     registry.exportColumn<Agent, Reward>(
         (uint32_t)ExportID::Reward);
     registry.exportColumn<Agent, Done>(
@@ -178,11 +186,31 @@ static inline ma::Entity makeAgent(Engine &ctx,
 
 static inline void initWorld(Engine &ctx,
                              uint32_t num_chunks_x,
-                             uint32_t num_chunks_y)
+                             uint32_t num_chunks_y,
+                             uint32_t init_num_agents)
 {
     makeFloorPlane(ctx, num_chunks_x, num_chunks_y);
     makeWalls(ctx, num_chunks_x, num_chunks_y);
 
+    float world_lim_x = num_chunks_x * ChunkInfo::kChunkWidth * 
+                        ctx.data().cellDim;
+    float world_lim_y = num_chunks_y * ChunkInfo::kChunkWidth * 
+                        ctx.data().cellDim;
+
+    for (uint32_t i = 0; i < init_num_agents; ++i) {
+        uint32_t species_idx = ctx.data().rng.sampleI32(0, kNumSpecies) + 1;
+
+        float x_pos = ctx.data().rng.sampleUniform() * world_lim_x;
+        float y_pos = ctx.data().rng.sampleUniform() * world_lim_y;
+
+        auto entity = makeAgent(
+                ctx,
+                ma::math::Vector3{ x_pos, y_pos, 1.f },
+                species_idx,
+                100);
+    }
+
+#if 0
     for (int y = 0; y < 4; ++y) {
         for (int x = 0; x < 4; ++x) {
             auto entity = makeAgent(
@@ -194,6 +222,7 @@ static inline void initWorld(Engine &ctx,
             (void)entity;
         }
     }
+#endif
 
     ma::Loc loc = ctx.makeStationary<ChunkInfoArchetype>(
             num_chunks_x * num_chunks_y);
@@ -360,8 +389,11 @@ inline void actionSystem(Engine &ctx,
                          ma::base::Position &pos,
                          AgentType agent_type,
                          Action &action,
-                         ma::render::RenderCamera &camera)
+                         ma::render::RenderCamera &camera,
+                         AgentObservationBridge &obs_bridge)
 {
+    action = ctx.get<Action>(obs_bridge.obsEntity);
+
     // First perform the shoot action if needed - we use the contents of the
     // previous frame from the raycasting output.
     if (action.shoot) {
@@ -492,8 +524,6 @@ inline void healthSync(Engine &ctx,
         // Destroy myself!
         ma::render::RenderingSystem::cleanupViewingEntity(ctx, e);
         ctx.destroyRenderableEntity(e);
-
-        LOG("Entity({}, {}) has been destroyed!\n", e.gen, e.id);
     }
 
     health_accum.v.store_relaxed(health.v);
@@ -683,13 +713,6 @@ inline void speciesInfoSync(Engine &ctx,
         rewards.rewards[i] = (float)count / 256.0f +
                              health_avg / 100.0f;
 
-        LOG("World={}; Species={}; Count={}; HealthAvg={}; Reward={}\n",
-                ctx.worldID().idx,
-                i,
-                count,
-                health_avg,
-                rewards.rewards[i]);
-
         tracker.countTracker[i].store_relaxed(0);
         tracker.healthTracker[i].store_relaxed(0);
     }
@@ -745,7 +768,8 @@ static void setupStepTasks(ma::TaskGraphBuilder &builder,
             ma::base::Position,
             AgentType,
             Action,
-            ma::render::RenderCamera
+            ma::render::RenderCamera,
+            AgentObservationBridge
         >>({add_food_sys});
 
     auto health_sync_sys = builder.addToGraph<ma::ParallelForNode<Engine,
@@ -858,7 +882,7 @@ Sim::Sim(Engine &ctx,
       totalAllowedFood(cfg.totalAllowedFood),
       currentNumFood(0)
 {
-    initWorld(ctx, numChunksX, numChunksY);
+    initWorld(ctx, numChunksX, numChunksY, cfg.initNumAgentsPerWorld);
 
     // Initialize state required for the raytracing
     ma::render::RenderingSystem::init(ctx,

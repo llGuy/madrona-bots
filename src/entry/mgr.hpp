@@ -11,7 +11,10 @@ public:
         int gpuID; // Which GPU for CUDA backend?
         uint32_t numWorlds; // Simulation batch size
         uint32_t randSeed; // Seed for random world gen
-        uint32_t sensorSize; // Number of pixels in the sensor
+        uint32_t initNumAgentsPerWorld; // Number of agents at the 
+                                        // start of the simulation
+
+        uint32_t sensorSize = 32; // Number of pixels in the sensor
         
         // If we are doing visualization
         void *renderBridge = nullptr;
@@ -21,8 +24,6 @@ public:
     ~Manager();
 
     void step();
-
-    std::vector<uint32_t> speciesOffsets() const;
 
     // This returns the semantic information that the agent sees.
     ma::py::Tensor semanticTensor() const;

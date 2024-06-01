@@ -78,6 +78,7 @@ int main(int argc, char **argv)
         .gpuID = 0,
         .numWorlds = 3,
         .randSeed = 0,
+        .initNumAgentsPerWorld = 16,
         .sensorSize = 32,
         .renderBridge = (void *)render_mgr.bridge()
     };
@@ -129,8 +130,16 @@ int main(int argc, char **argv)
             if (input.keyPressed(Key::Space)) shoot = 1;
             if (input.keyPressed(Key::Q)) breed = 1;
 
+            uint32_t *sensor_idx_tensor = (uint32_t *)(mgr.sensorIndexTensor().devicePtr());
+
+            int32_t global_agent_idx = mgr.agentOffsetForWorld(inspecting_world_idx) +
+                                        inspecting_agent_idx;
+
+            cudaMemcpy(sensor_idx_ptr, sensor_idx_tensor + global_agent_idx,
+                    sizeof(uint32_t), cudaMemcpyDeviceToHost);
+
             // For now, we only control the agent of the first world.
-            mgr.setAction(agent_idx + mgr.agentOffsetForWorld(world_idx), 
+            mgr.setAction(*sensor_idx_ptr, 
                           forward, backward, rotate_left, rotate_right, shoot, breed);
 
             inspecting_agent_idx = agent_idx;

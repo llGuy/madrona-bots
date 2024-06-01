@@ -99,7 +99,8 @@ Manager::Impl *Manager::Impl::make(const Config &mgr_cfg)
         .cellDim = 1.f,
         .renderBridge = mgr_cfg.renderBridge,
         .simBridge = sim_bridge,
-        .totalAllowedFood = 30
+        .totalAllowedFood = 30,
+        .initNumAgentsPerWorld = mgr_cfg.initNumAgentsPerWorld
     };
 
 
@@ -234,57 +235,56 @@ uint32_t Manager::agentOffsetForWorld(uint32_t world_idx)
     return impl_->agentWorldOffsets[world_idx];
 }
 
-std::vector<uint32_t> Manager::speciesOffsets() const
-{
-    return { 0, 5, 12, 42, 69 };
-}
-
 // One reward per species.
 ma::py::Tensor Manager::rewardTensor() const
 {
-    return ma::py::Tensor(
-            nullptr,
-            ma::py::TensorElementType::Int32,
-            { 1 },
-            0);
+    // Returns a (num_worlds, num_species) tensor
+    return impl_->exportTensor(mbots::ExportID::Reward,
+                               ma::py::TensorElementType::Float32,
+                               {
+                                   impl_->cfg.numWorlds,
+                                   mbots::kNumSpecies
+                               });
 }
 
 ma::py::Tensor Manager::positionTensor() const
 {
-    
-    return ma::py::Tensor(
-            nullptr,
-            ma::py::TensorElementType::Int32,
-            { 1 },
-            0);
+    return impl_->exportTensor(mbots::ExportID::Position,
+                               ma::py::TensorElementType::Float32,
+                               {
+                                   impl_->simBridge->totalNumAgents,
+                                   2
+                               });
 }
 
 ma::py::Tensor Manager::healthTensor() const
 {
     
-    return ma::py::Tensor(
-            nullptr,
-            ma::py::TensorElementType::Int32,
-            { 1 },
-            0);
+    return impl_->exportTensor(mbots::ExportID::Health,
+                               ma::py::TensorElementType::Float32,
+                               {
+                                   impl_->simBridge->totalNumAgents,
+                                   1
+                               });
 }
 
 ma::py::Tensor Manager::surroundingTensor() const
 {
-    
-    return ma::py::Tensor(
-            nullptr,
-            ma::py::TensorElementType::Int32,
-            { 1 },
-            0);
+    return impl_->exportTensor(mbots::ExportID::Surrounding,
+                               ma::py::TensorElementType::Float32,
+                               {
+                                   impl_->simBridge->totalNumAgents,
+                                   2 // Presence and movement heuristics
+                               });
 }
 
 ma::py::Tensor Manager::actionTensor() const
 {
     
-    return ma::py::Tensor(
-            nullptr,
-            ma::py::TensorElementType::Int32,
-            { 1 },
-            0);
+    return impl_->exportTensor(mbots::ExportID::Action,
+                               ma::py::TensorElementType::Int32,
+                               {
+                                   impl_->simBridge->totalNumAgents,
+                                   6 // There are 6 possible actions to take
+                               });
 }

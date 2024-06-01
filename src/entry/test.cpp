@@ -10,6 +10,7 @@ int main(int argc, char **argv)
         .gpuID = 0,
         .numWorlds = 1,
         .randSeed = 0,
+        .initNumAgentsPerWorld = 16,
         .sensorSize = 32,
     };
 

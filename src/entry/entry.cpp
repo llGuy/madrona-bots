@@ -17,17 +17,18 @@ NB_MODULE(madrona_bots, m) {
                             int64_t gpu_id,
                             int64_t num_worlds,
                             int64_t rand_seed,
-                            int64_t sensor_size) {
+                            int64_t init_num_agents_per_world) {
             new (self) Manager(Manager::Config {
                 .gpuID = (int)gpu_id,
                 .numWorlds = (uint32_t)num_worlds,
                 .randSeed = (uint32_t)rand_seed,
-                .sensorSize = (uint32_t)sensor_size
+                .initNumAgentsPerWorld = (uint32_t)init_num_agents_per_world,
+                .sensorSize = 32u
             });
         }, nb::arg("gpu_id"),
            nb::arg("num_worlds"),
            nb::arg("rand_seed"),
-           nb::arg("sensor_size"))
+           nb::arg("init_num_agents_per_world"))
         .def("step", &Manager::step)
         .def("depth_tensor", &Manager::depthTensor)
         .def("semantic_tensor", &Manager::semanticTensor)
@@ -35,5 +36,6 @@ NB_MODULE(madrona_bots, m) {
         .def("position_tensor", &Manager::positionTensor)
         .def("health_tensor", &Manager::healthTensor)
         .def("surrounding_tensor", &Manager::surroundingTensor)
+        .def("action_tensor", &Manager::actionTensor)
     ;
 }
