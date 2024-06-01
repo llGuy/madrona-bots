@@ -86,8 +86,8 @@ void Sim::registerTypes(ma::ECSRegistry &registry, const Config &cfg)
 
     registry.exportColumn<SpeciesInfoArchetype, SpeciesCount>(
             (uint32_t)ExportID::SpeciesCount);
-    registry.exportColumn<SpeciesInfoArchetype, SpeciesReward>(
-            (uint32_t)ExportID::SpeciesReward);
+    registry.exportColumn<AgentObservationArchetype, Reward>(
+            (uint32_t)ExportID::Reward);
 }
 
 static inline void makeFloorPlane(Engine &ctx,
@@ -198,7 +198,8 @@ static inline void initWorld(Engine &ctx,
                         ctx.data().cellDim;
 
     for (uint32_t i = 0; i < init_num_agents; ++i) {
-        uint32_t species_idx = ctx.data().rng.sampleI32(0, kNumSpecies) + 1;
+        // uint32_t species_idx = ctx.data().rng.sampleI32(0, kNumSpecies) + 1;
+        uint32_t species_idx = (i % kNumSpecies) + 1;
 
         float x_pos = ctx.data().rng.sampleUniform() * world_lim_x;
         float y_pos = ctx.data().rng.sampleUniform() * world_lim_y;
@@ -209,20 +210,6 @@ static inline void initWorld(Engine &ctx,
                 species_idx,
                 100);
     }
-
-#if 0
-    for (int y = 0; y < 4; ++y) {
-        for (int x = 0; x < 4; ++x) {
-            auto entity = makeAgent(
-                    ctx,
-                    ma::math::Vector3{ 3.f + x * 10.f, 3.f + y * 10.f, 1.f },
-                    x + 1,
-                    100);
-
-            (void)entity;
-        }
-    }
-#endif
 
     ma::Loc loc = ctx.makeStationary<ChunkInfoArchetype>(
             num_chunks_x * num_chunks_y);
@@ -602,12 +589,6 @@ inline void updateSurroundingObservation(Engine &ctx,
     surroundings.movementHeuristic = total_speed_interpolated;
 }
 
-inline void rewardSystem(Engine &ctx,
-                         ma::base::Position pos,
-                         Reward &out_reward)
-{
-}
-
 inline void nopSystem(Engine &,
                       ma::Entity)
 {
@@ -718,6 +699,20 @@ inline void speciesInfoSync(Engine &ctx,
     }
 }
 
+inline void rewardSystem(Engine &ctx,
+                         Species &species,
+                         Health &health,
+                         AgentObservationBridge &bridge)
+{
+    SpeciesReward &species_rew = ctx.get<SpeciesReward>(
+            ctx.data().speciesInfoTracker);
+
+    Reward &reward = ctx.get<Reward>(bridge.obsEntity);
+
+    reward.v = species_rew.rewards[species.speciesID] +
+               health.v / 100.f;
+}
+
 inline void bridgeSyncSystem(Engine &ctx,
                        BridgeSync)
 {
@@ -791,15 +786,9 @@ static void setupStepTasks(ma::TaskGraphBuilder &builder,
             SurroundingObservation
          >>({health_sync_sys});
 
-    // Conditionally reset the world if the episode is over
-    auto reward_sys = builder.addToGraph<ma::ParallelForNode<Engine,
-        rewardSystem,
-            ma::base::Position,
-            Reward
-        >>({update_surrounding_obs_sys});
-
     // Required
-    auto clear_tmp = builder.addToGraph<ma::ResetTmpAllocNode>({reward_sys});
+    auto clear_tmp = builder.addToGraph<ma::ResetTmpAllocNode>(
+            {update_surrounding_obs_sys});
 
     auto sort_agents = queueSortByWorld<Agent>(
         builder, {clear_tmp});
@@ -840,8 +829,16 @@ static void setupStepTasks(ma::TaskGraphBuilder &builder,
             SpeciesReward
         >>({update_sensor_idx});
 
+    // Conditionally reset the world if the episode is over
+    auto reward_sys = builder.addToGraph<ma::ParallelForNode<Engine,
+        rewardSystem,
+            Species,
+            Health,
+            AgentObservationBridge
+        >>({species_info_sys});
+
     auto sort_species = queueSortByWorld<SpeciesInfoArchetype>(
-            builder, {species_info_sys});
+            builder, {reward_sys});
 
     auto bridge_sync_sys = builder.addToGraph<ma::ParallelForNode<Engine,
         bridgeSyncSystem,

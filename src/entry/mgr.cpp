@@ -242,12 +242,22 @@ uint32_t Manager::agentOffsetForWorld(uint32_t world_idx)
 // One reward per species.
 ma::py::Tensor Manager::rewardTensor() const
 {
+#if 0
     // Returns a (num_worlds, num_species) tensor
     return impl_->exportTensor(mbots::ExportID::Reward,
                                ma::py::TensorElementType::Float32,
                                {
                                    impl_->cfg.numWorlds,
                                    mbots::kNumSpecies
+                               });
+#endif
+
+    // Returns a (total_num_agents, 1) tensor for rewards
+    return impl_->exportTensor(mbots::ExportID::Reward,
+                               ma::py::TensorElementType::Float32,
+                               {
+                                   impl_->simBridge->totalNumAgents,
+                                   1
                                });
 }
 

@@ -30,7 +30,6 @@ enum class ExportID : uint32_t {
     SensorIndex,
 
     SpeciesCount,
-    SpeciesReward,
 
     NumExports
 };

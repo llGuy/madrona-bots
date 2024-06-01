@@ -210,6 +210,7 @@ struct AgentObservationArchetype : ma::Archetype<
     PositionObservation,
     HealthObservation,
     SurroundingObservation,
+    Reward,
 
     // The agent observation archetype has the action too because
     // of ordering (sorting based on species index)
