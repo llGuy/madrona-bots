@@ -426,8 +426,8 @@ inline void actionSystem(Engine &ctx,
                                (float)ChunkInfo::kChunkWidth *
                                (float)ctx.data().numChunksY;
 
-    pos.x = std::min(kWorldLimitX, std::max(0.f, pos.x));
-    pos.y = std::min(kWorldLimitY, std::max(0.f, pos.y));
+    pos.x = std::min(kWorldLimitX - 1.0f, std::max(0.f, pos.x));
+    pos.y = std::min(kWorldLimitY - 1.0f, std::max(0.f, pos.y));
 
     ma::math::Vector3 delta_pos = pos - old_pos;
     float delta_pos_len = delta_pos.length();
