@@ -9,7 +9,7 @@ int main(int argc, char **argv)
 
     ScriptBotsViewer::Config cfg = {
         .gpuID = 0,
-        .numWorlds = 4,
+        .numWorlds = 1,
         .randSeed = 0,
         .initNumAgentsPerWorld = 16,
         .windowWidth = 1385,
