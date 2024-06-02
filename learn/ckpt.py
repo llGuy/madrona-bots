@@ -1,25 +1,41 @@
 import os
+import torch
 
 class CheckpointManager:
-    def __init__(self, ckpt_dir, restore):
-        self.ckpt_dir = ckpt_dir
+    def __init__(self, base_ckpt_dir, restore=True):
+        self.base_ckpt_dir = base_ckpt_dir
         self.restore = restore
+        self._check_dir(base_ckpt_dir)
 
-        _check_ckpt_dir(ckpt_dir)
+    def save(self, model, optimizer, sub_dir, epoch):
+        full_path = os.path.join(self.base_ckpt_dir, sub_dir)
+        self._check_dir(full_path)
+        
+        save_path = os.path.join(full_path, f'model_epoch_{epoch}.pt')
+        
+        torch.save({
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'model_config': model.get_config()
+        }, save_path)
 
-    # Gets the policy networks for the species from the checkpoint directory.
-    # If the directory doesn't contain anything, or restore is set to false,
-    # we need to initialize random weights
-    def load_networks(self, init_fn)
-        if self.restore and len(os.listdir(self.ckpt_dir)) > 0:
-            raise NotImplementedError
+    def load(self, model_class, optimizer_class, sub_dir, epoch, init_fn):
+        load_path = os.path.join(self.base_ckpt_dir, sub_dir, f'model_epoch_{epoch}.pt')
+        assert init_fn is not None, "Init function needed"
+
+        if self.restore and os.path.isfile(load_path):
+            checkpoint = torch.load(load_path)
+            model = init_fn(checkpoint['model_config'])
+            model.load_state_dict(checkpoint['model_state_dict'])
+            optimizer = optimizer_class(model.parameters())
+            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            return model, optimizer
         else:
-            return init_fn()
+            model = init_fn()
+            optimizer = optimizer_class(model.parameters(), lr=3e-4)
+            return model, optimizer
 
-    def save(self):
-        pass
-
-    def _check_ckpt_dir(self, ckpt_dir):
-        # This will create the directory if it doesn't exit
-        if not os.path.exists(ckpt_dir):
-            os.makedirs(ckpt_dir)
+    def _check_dir(self, path):
+        # Create the directory if it doesn't exist
+        if not os.path.exists(path):
+            os.makedirs(path)
