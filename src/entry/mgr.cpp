@@ -25,6 +25,7 @@ struct Manager::Impl {
     // and observations.
     ma::MWCudaLaunchGraph stepGraph;
     ma::MWCudaLaunchGraph sensorGraph;
+    ma::MWCudaLaunchGraph shiftObsGraph;
 
     mbots::Action *actionBuffer;
 
@@ -41,6 +42,7 @@ struct Manager::Impl {
          ma::MWCudaExecutor &&exec,
          ma::MWCudaLaunchGraph &&step,
          ma::MWCudaLaunchGraph &&sensor,
+         ma::MWCudaLaunchGraph &&shift_obs_graph,
          mbots::Action *action_buffer,
          mbots::SimBridge *sim_bridge);
 
@@ -60,6 +62,11 @@ struct Manager::Impl {
                    cudaMemcpyDeviceToHost);
     }
 
+    inline void shiftObservations()
+    {
+        gpuExec.run(shiftObsGraph);
+    }
+
     inline ma::py::Tensor exportTensor(mbots::ExportID slot,
         ma::py::TensorElementType type,
         ma::Span<const int64_t> dims) const
@@ -73,12 +80,14 @@ Manager::Impl::Impl(const Config &mgr_cfg,
                     ma::MWCudaExecutor &&exec,
                     ma::MWCudaLaunchGraph &&step,
                     ma::MWCudaLaunchGraph &&sensor,
+                    ma::MWCudaLaunchGraph &&shift_obs,
                     mbots::Action *action_buffer,
                     mbots::SimBridge *sim_bridge)
     : cfg(mgr_cfg),
       gpuExec(std::move(exec)),
       stepGraph(std::move(step)),
       sensorGraph(std::move(sensor)),
+      shiftObsGraph(std::move(shift_obs)),
       actionBuffer(action_buffer),
       simBridge(sim_bridge),
       agentWorldOffsets((int32_t *)malloc(sizeof(int32_t) * mgr_cfg.numWorlds)),
@@ -144,6 +153,8 @@ Manager::Impl *Manager::Impl::make(const Config &mgr_cfg)
             mbots::TaskGraphID::Step, false);
     ma::MWCudaLaunchGraph sensor_graph = gpu_exec.buildLaunchGraph(
             mbots::TaskGraphID::Sensor, true);
+    ma::MWCudaLaunchGraph shift_obs = gpu_exec.buildLaunchGraph(
+            mbots::TaskGraphID::ShiftObservations, false);
 
     // Run the init taskgraph
     gpu_exec.run(init_graph);
@@ -155,6 +166,7 @@ Manager::Impl *Manager::Impl::make(const Config &mgr_cfg)
                     std::move(gpu_exec),
                     std::move(step_graph),
                     std::move(sensor_graph),
+                    std::move(shift_obs),
                     action_buffer,
                     sim_bridge);
 }
@@ -179,26 +191,51 @@ void Manager::step()
     impl_->step();
 }
 
-ma::py::Tensor Manager::semanticTensor() const
+void Manager::shiftObservations()
 {
-    uint32_t pixels_per_view = impl_->cfg.sensorSize;
-    return impl_->exportTensor(mbots::ExportID::SensorSemantic,
-                               ma::py::TensorElementType::Int8,
-                               {
-                                   impl_->simBridge->totalNumAgents,
-                                   pixels_per_view,
-                               });
+    impl_->shiftObservations();
 }
 
-ma::py::Tensor Manager::depthTensor() const
+ma::py::Tensor Manager::semanticTensor(bool is_prev) const
 {
     uint32_t pixels_per_view = impl_->cfg.sensorSize;
-    return impl_->exportTensor(mbots::ExportID::SensorDepth,
-                               ma::py::TensorElementType::UInt8,
-                               {
-                                   impl_->simBridge->totalNumAgents,
-                                   pixels_per_view,
-                               });
+
+    if (is_prev) {
+        return impl_->exportTensor(mbots::ExportID::PrevSensorSemantic,
+                                   ma::py::TensorElementType::Int8,
+                                   {
+                                       impl_->simBridge->totalNumAgents,
+                                       pixels_per_view,
+                                   });
+    } else {
+        return impl_->exportTensor(mbots::ExportID::SensorSemantic,
+                                   ma::py::TensorElementType::Int8,
+                                   {
+                                       impl_->simBridge->totalNumAgents,
+                                       pixels_per_view,
+                                   });
+    }
+}
+
+ma::py::Tensor Manager::depthTensor(bool is_prev) const
+{
+    uint32_t pixels_per_view = impl_->cfg.sensorSize;
+
+    if (is_prev) {
+        return impl_->exportTensor(mbots::ExportID::PrevSensorDepth,
+                                   ma::py::TensorElementType::UInt8,
+                                   {
+                                       impl_->simBridge->totalNumAgents,
+                                       pixels_per_view,
+                                   });
+    } else {
+        return impl_->exportTensor(mbots::ExportID::SensorDepth,
+                                   ma::py::TensorElementType::UInt8,
+                                   {
+                                       impl_->simBridge->totalNumAgents,
+                                       pixels_per_view,
+                                   });
+    }
 }
 
 ma::py::Tensor Manager::sensorIndexTensor() const
@@ -240,15 +277,24 @@ uint32_t Manager::agentOffsetForWorld(uint32_t world_idx)
 }
 
 // One reward per species.
-ma::py::Tensor Manager::rewardTensor() const
+ma::py::Tensor Manager::rewardTensor(bool is_prev) const
 {
     // Returns a (total_num_agents, 1) tensor for rewards
-    return impl_->exportTensor(mbots::ExportID::Reward,
-                               ma::py::TensorElementType::Float32,
-                               {
-                                   impl_->simBridge->totalNumAgents,
-                                   1
-                               });
+    if (is_prev) {
+        return impl_->exportTensor(mbots::ExportID::PrevReward,
+                                   ma::py::TensorElementType::Float32,
+                                   {
+                                       impl_->simBridge->totalNumAgents,
+                                       1
+                                   });
+    } else {
+        return impl_->exportTensor(mbots::ExportID::Reward,
+                                   ma::py::TensorElementType::Float32,
+                                   {
+                                       impl_->simBridge->totalNumAgents,
+                                       1
+                                   });
+    }
 }
 
 ma::py::Tensor Manager::speciesCountTensor() const
@@ -261,44 +307,78 @@ ma::py::Tensor Manager::speciesCountTensor() const
                                });
 }
 
-ma::py::Tensor Manager::positionTensor() const
+ma::py::Tensor Manager::positionTensor(bool is_prev) const
 {
-    return impl_->exportTensor(mbots::ExportID::Position,
-                               ma::py::TensorElementType::Float32,
-                               {
-                                   impl_->simBridge->totalNumAgents,
-                                   2
-                               });
+    if (is_prev) {
+        return impl_->exportTensor(mbots::ExportID::PrevPosition,
+                                   ma::py::TensorElementType::Float32,
+                                   {
+                                       impl_->simBridge->totalNumAgents,
+                                       2
+                                   });
+    } else {
+        return impl_->exportTensor(mbots::ExportID::Position,
+                                   ma::py::TensorElementType::Float32,
+                                   {
+                                       impl_->simBridge->totalNumAgents,
+                                       2
+                                   });
+    }
 }
 
-ma::py::Tensor Manager::healthTensor() const
+ma::py::Tensor Manager::healthTensor(bool is_prev) const
 {
-    
-    return impl_->exportTensor(mbots::ExportID::Health,
-                               ma::py::TensorElementType::Float32,
-                               {
-                                   impl_->simBridge->totalNumAgents,
-                                   1
-                               });
+    if (is_prev) {
+        return impl_->exportTensor(mbots::ExportID::PrevHealth,
+                                   ma::py::TensorElementType::Float32,
+                                   {
+                                       impl_->simBridge->totalNumAgents,
+                                       1
+                                   });
+    } else {
+        return impl_->exportTensor(mbots::ExportID::Health,
+                                   ma::py::TensorElementType::Float32,
+                                   {
+                                       impl_->simBridge->totalNumAgents,
+                                       1
+                                   });
+    }
 }
 
-ma::py::Tensor Manager::surroundingTensor() const
+ma::py::Tensor Manager::surroundingTensor(bool is_prev) const
 {
-    return impl_->exportTensor(mbots::ExportID::Surrounding,
-                               ma::py::TensorElementType::Float32,
-                               {
-                                   impl_->simBridge->totalNumAgents,
-                                   2 // Presence and movement heuristics
-                               });
+    if (is_prev) {
+        return impl_->exportTensor(mbots::ExportID::PrevSurrounding,
+                                   ma::py::TensorElementType::Float32,
+                                   {
+                                       impl_->simBridge->totalNumAgents,
+                                       2 // Presence and movement heuristics
+                                   });
+    } else {
+        return impl_->exportTensor(mbots::ExportID::Surrounding,
+                                   ma::py::TensorElementType::Float32,
+                                   {
+                                       impl_->simBridge->totalNumAgents,
+                                       2 // Presence and movement heuristics
+                                   });
+    }
 }
 
-ma::py::Tensor Manager::actionTensor() const
+ma::py::Tensor Manager::actionTensor(bool is_prev) const
 {
-    
-    return impl_->exportTensor(mbots::ExportID::Action,
-                               ma::py::TensorElementType::Int32,
-                               {
-                                   impl_->simBridge->totalNumAgents,
-                                   6 // There are 6 possible actions to take
-                               });
+    if (is_prev) {
+        return impl_->exportTensor(mbots::ExportID::PrevAction,
+                                   ma::py::TensorElementType::Int32,
+                                   {
+                                       impl_->simBridge->totalNumAgents,
+                                       6 // There are 6 possible actions to take
+                                   });
+    } else {
+        return impl_->exportTensor(mbots::ExportID::Action,
+                                   ma::py::TensorElementType::Int32,
+                                   {
+                                       impl_->simBridge->totalNumAgents,
+                                       6 // There are 6 possible actions to take
+                                   });
+    }
 }

@@ -43,6 +43,13 @@ void Sim::registerTypes(ma::ECSRegistry &registry, const Config &cfg)
     registry.registerComponent<AgentObservationBridge>();
     registry.registerComponent<SensorOutputIndex>();
 
+    registry.registerComponent<PrevSpeciesObservation>();
+    registry.registerComponent<PrevPositionObservation>();
+    registry.registerComponent<PrevHealthObservation>();
+    registry.registerComponent<PrevSurroundingObservation>();
+    registry.registerComponent<PrevReward>();
+    registry.registerComponent<PrevAction>();
+
     registry.registerComponent<SpeciesInfoTracker>();
     registry.registerComponent<SpeciesCount>();
     registry.registerComponent<SpeciesReward>();
@@ -69,25 +76,44 @@ void Sim::registerTypes(ma::ECSRegistry &registry, const Config &cfg)
     registry.exportColumn<AgentObservationArchetype, HealthObservation>(
         (uint32_t)ExportID::Health);
 
-    registry.exportColumn<Agent, Reward>(
-        (uint32_t)ExportID::Reward);
+    registry.exportColumn<AgentObservationArchetype, PrevPositionObservation>(
+        (uint32_t)ExportID::PrevPosition);
+    registry.exportColumn<AgentObservationArchetype, PrevAction>(
+        (uint32_t)ExportID::PrevAction);
+    registry.exportColumn<AgentObservationArchetype, PrevSurroundingObservation>(
+        (uint32_t)ExportID::PrevSurrounding);
+    registry.exportColumn<AgentObservationArchetype, PrevHealthObservation>(
+        (uint32_t)ExportID::PrevHealth);
+
     registry.exportColumn<Agent, Done>(
         (uint32_t)ExportID::Done);
 
     registry.exportColumn<ma::render::RaycastOutputArchetype,
         ma::render::SemanticOutputBuffer>(
             (uint32_t)ExportID::SensorSemantic);
+
     registry.exportColumn<ma::render::RaycastOutputArchetype,
         ma::render::SemanticOutputBuffer>(
             (uint32_t)ExportID::SensorDepth);
+
+    registry.exportColumn<ma::render::RaycastOutputArchetype,
+        ma::render::PrevSemanticOutputBuffer>(
+            (uint32_t)ExportID::PrevSensorSemantic);
+
+    registry.exportColumn<ma::render::RaycastOutputArchetype,
+        ma::render::PrevSemanticOutputBuffer>(
+            (uint32_t)ExportID::PrevSensorDepth);
 
     registry.exportColumn<Agent, SensorOutputIndex>(
             (uint32_t)ExportID::SensorIndex);
 
     registry.exportColumn<SpeciesInfoArchetype, SpeciesCount>(
             (uint32_t)ExportID::SpeciesCount);
+
     registry.exportColumn<AgentObservationArchetype, Reward>(
             (uint32_t)ExportID::Reward);
+    registry.exportColumn<AgentObservationArchetype, PrevReward>(
+            (uint32_t)ExportID::PrevReward);
 }
 
 static inline void makeFloorPlane(Engine &ctx,
@@ -652,12 +678,47 @@ inline void updateSensorOutputIdx(Engine &ctx,
                                   ma::render::Renderable &renderable,
                                   Health &health)
 {
-    uint32_t row_idx = ctx.loc(bridge.obsEntity).row;
+    ma::StateManager *mgr = ma::mwGPU::getStateManager();
 
-    ctx.get<ma::render::PerspectiveCameraData>(
-            cam.cameraEntity).rowIDX = row_idx;
 
-    output_idx.idx = row_idx;
+
+    auto semantic_output_buffer = (uint8_t *)mgr->getArchetypeComponent<
+        ma::render::RaycastOutputArchetype,
+        ma::render::SemanticOutputBuffer>();
+
+    auto depth_output_buffer = (uint8_t *)mgr->getArchetypeComponent<
+        ma::render::RaycastOutputArchetype,
+        ma::render::DepthOutputBuffer>();
+
+    auto prev_semantic_output_buffer = (uint8_t *)mgr->getArchetypeComponent<
+        ma::render::RaycastOutputArchetype,
+        ma::render::PrevSemanticOutputBuffer>();
+
+    auto prev_depth_output_buffer = (uint8_t *)mgr->getArchetypeComponent<
+        ma::render::RaycastOutputArchetype,
+        ma::render::PrevDepthOutputBuffer>();
+
+
+
+    auto &pres_cam_data = ctx.get<ma::render::PerspectiveCameraData>(
+            cam.cameraEntity);
+
+    // We need to copy the contents of the sensor output from the output
+    // frame.
+    uint32_t prev_row_idx = output_idx.idx;
+    uint32_t current_row_idx = ctx.loc(bridge.obsEntity).row;
+
+    memcpy(prev_semantic_output_buffer + current_row_idx * 32,
+           semantic_output_buffer + prev_row_idx * 32,
+           32);
+
+    memcpy(prev_depth_output_buffer + current_row_idx * 32,
+           depth_output_buffer + prev_row_idx * 32,
+           32);
+
+
+    pres_cam_data.rowIDX = current_row_idx;
+    output_idx.idx = current_row_idx;
 
     // Update the species index too
     ctx.get<ma::render::InstanceData>(
@@ -727,6 +788,37 @@ inline void bridgeSyncSystem(Engine &ctx,
         ctx.data().simBridge->agentWorldCounts =
             state_mgr->getArchetypeWorldCounts<Agent>();
     }
+}
+
+// Copies the "normal" observations (we still need to copy the sensor obs).
+inline void shiftObservationsSystem(
+        Engine &ctx,
+        const SpeciesObservation &species_obs,
+        const PositionObservation &pos_obs,
+        const HealthObservation &health_obs,
+        const SurroundingObservation &sur_obs,
+        const Reward &rew_obs,
+        const Action &act_obs,
+        PrevSpeciesObservation &prev_species_obs,
+        PrevPositionObservation &prev_pos_obs,
+        PrevHealthObservation &prev_health_obs,
+        PrevSurroundingObservation &prev_sur_obs,
+        PrevReward &prev_rew_obs,
+        PrevAction &prev_act_obs)
+{
+    prev_species_obs.speciesID = species_obs.speciesID;
+    prev_pos_obs.pos = pos_obs.pos;
+    prev_health_obs.v = health_obs.v;
+    prev_sur_obs.presenceHeuristic = sur_obs.presenceHeuristic;
+    prev_sur_obs.movementHeuristic = sur_obs.movementHeuristic;
+    prev_rew_obs.v = rew_obs.v;
+
+    prev_act_obs.forward = act_obs.forward;
+    prev_act_obs.backward = act_obs.backward;
+    prev_act_obs.rotateLeft = act_obs.rotateLeft;
+    prev_act_obs.rotateRight = act_obs.rotateRight;
+    prev_act_obs.shoot = act_obs.shoot;
+    prev_act_obs.breed = act_obs.breed;
 }
 
 static void setupInitTasks(ma::TaskGraphBuilder &builder,
@@ -855,12 +947,38 @@ static void setupSensorTasks(ma::TaskGraphBuilder &builder,
     ma::render::RenderingSystem::setupTasks(builder, {});
 }
 
+static void setupShiftObservationsTasks(ma::TaskGraphBuilder &builder,
+                                        const Sim::Config &cfg)
+{
+    auto shift_obs_sys = builder.addToGraph<ma::ParallelForNode<Engine,
+        shiftObservationsSystem,
+            // Basically just loop through all components of the observation
+            // archetype
+            SpeciesObservation,
+            PositionObservation,
+            HealthObservation,
+            SurroundingObservation,
+            Reward,
+            Action,
+            PrevSpeciesObservation,
+            PrevPositionObservation,
+            PrevHealthObservation,
+            PrevSurroundingObservation,
+            PrevReward,
+            PrevAction
+        >>({});
+
+    (void)shift_obs_sys;
+}
+
 // Build the task graph
 void Sim::setupTasks(ma::TaskGraphManager &taskgraph_mgr, const Config &cfg)
 {
     setupInitTasks(taskgraph_mgr.init(TaskGraphID::Init), cfg);
     setupStepTasks(taskgraph_mgr.init(TaskGraphID::Step), cfg);
     setupSensorTasks(taskgraph_mgr.init(TaskGraphID::Sensor), cfg);
+    setupShiftObservationsTasks(
+            taskgraph_mgr.init(TaskGraphID::ShiftObservations), cfg);
 }
 
 Sim::Sim(Engine &ctx,

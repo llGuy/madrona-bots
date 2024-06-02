@@ -18,15 +18,28 @@ class Engine;
 enum class ExportID : uint32_t {
     Reset,
     Action,
+    PrevAction,
+
     Reward,
+    PrevReward,
+
     Done,
 
     Position,
+    PrevPosition,
+
     Health,
+    PrevHealth,
+
     Surrounding,
+    PrevSurrounding,
 
     SensorSemantic,
     SensorDepth,
+
+    PrevSensorSemantic,
+    PrevSensorDepth,
+
     SensorIndex,
 
     SpeciesCount,
@@ -38,6 +51,7 @@ enum class TaskGraphID : uint32_t {
     Init,
     Step,
     Sensor,
+    ShiftObservations,
     NumTaskGraphs,
 };
 
