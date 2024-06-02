@@ -44,8 +44,7 @@ for epoch in range(1, 11):
 
     sim_mgr.step()
     species_counts = sim_mgr.species_count_tensor().to_torch()
-    species_count_cpy = species_counts.clone()
-    species_end_offsets = species_count_cpy.sum(dim=0).cumsum(dim=0)
+    species_end_offsets = species_counts.sum(dim=0).cumsum(dim=0)
     species_start_offsets = torch.cat((torch.zeros(1, dtype=torch.int, device=device), species_end_offsets[:-1]))
     
     action_tensor = sim_mgr.action_tensor().to_torch()
