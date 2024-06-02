@@ -9,10 +9,8 @@ import torch
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-sim_mgr = SimManager(0, 2048, 69, 32)
-
-tensor_attributes = {attr: getattr(sim_mgr, attr)() for attr in dir(sim_mgr) if isinstance(getattr(sim_mgr, attr), madrona_bots.madrona.Tensor)}
-print(tensor_attributes)
+# sim_mgr = SimManager(0, 2048, 69, 32)
+sim_mgr = SimManager(0, 4, 69, 32)
 
 universe_id = 'luc'
 num_species = 4
@@ -70,13 +68,14 @@ for epoch in range(1, 11):
         
         optimizer.zero_grad()
         total_loss = actor_loss + critic_loss
-        print("Actor: ", actor_loss, "; Critic: ", critic_loss)
-        print("Total Loss: ", total_loss)
+        print("Actor: ", actor_loss.item(), "; Critic: ", critic_loss.item())
+        print("Total Loss: ", total_loss.item())
         total_loss.backward()
         optimizer.step()
 
         one_hot_actions = torch.zeros(actions.size(0), action_dim, device='cuda:0')
-        one_hot_actions.scatter_(1, actions.unsqueeze(1), 1).int()
+        one_hot_actions.scatter_(1, actions.unsqueeze(1), 1)
 
-        action_tensor[sp_start:sp_end, :] = one_hot_actions
+        action_tensor[sp_start:sp_end, :] = one_hot_actions.int()
+        # T()
         # TODO: add model saving
