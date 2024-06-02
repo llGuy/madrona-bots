@@ -31,6 +31,7 @@ NB_MODULE(madrona_bots, m) {
            nb::arg("rand_seed"),
            nb::arg("init_num_agents_per_world"))
         .def("step", &Manager::step)
+        .def("shift_observations", &Manager::shiftObservations)
         .def("depth_tensor", &Manager::depthTensor)
         .def("semantic_tensor", &Manager::semanticTensor)
         .def("reward_tensor", &Manager::rewardTensor)

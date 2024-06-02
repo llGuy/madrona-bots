@@ -31,9 +31,13 @@ struct Action {
     int32_t breed;
 };
 
+struct PrevAction : Action {};
+
 struct Reward {
     float v;
 };
+
+struct PrevReward : Reward {};
 
 struct Done {
     int32_t v;
@@ -103,13 +107,14 @@ struct SurroundingObservation {
     float movementHeuristic;
 };
 
+struct PrevSurroundingObservation : SurroundingObservation {};
+
 struct Health {
     int32_t v;
 };
 
-struct HealthObservation : Health {
-    // Nothing
-};
+struct HealthObservation : Health {};
+struct PrevHealthObservation : HealthObservation {};
 
 // We need to separate out the Health and HealthAccumulator for concurrency
 // reasons.
@@ -117,25 +122,21 @@ struct HealthAccumulator {
     ma::AtomicI32 v;
 };
 
-struct BridgeSync {
-    // This doesn't have anything
-};
-
-struct AddFoodSingleton {
-    // This doesn't have anything
-};
+struct BridgeSync {};
+struct AddFoodSingleton {};
 
 struct PositionObservation {
     ma::math::Vector2 pos;
 };
 
+struct PrevPositionObservation : PositionObservation {};
+
 struct Species {
     uint32_t speciesID;
 };
 
-struct SpeciesObservation : Species {
-    // This is just inherited
-};
+struct SpeciesObservation : Species {};
+struct PrevSpeciesObservation : SpeciesObservation {};
 
 struct AgentObservationBridge {
     ma::Entity obsEntity;
@@ -214,7 +215,17 @@ struct AgentObservationArchetype : ma::Archetype<
 
     // The agent observation archetype has the action too because
     // of ordering (sorting based on species index)
-    Action
+    Action,
+
+
+
+    // Now, store all the previous actions for training purposes.
+    PrevSpeciesObservation,
+    PrevPositionObservation,
+    PrevHealthObservation,
+    PrevSurroundingObservation,
+    PrevReward,
+    PrevAction
 > {};
 
 // This is mostly for the visualizer

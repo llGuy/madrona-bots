@@ -26,25 +26,26 @@ public:
     ~Manager();
 
     void step();
+    void shiftObservations();
 
     // This returns the semantic information that the agent sees.
-    ma::py::Tensor semanticTensor() const;
+    ma::py::Tensor semanticTensor(bool is_prev = false) const;
 
     // This returns the depth information that the agent sees.
-    ma::py::Tensor depthTensor() const;
+    ma::py::Tensor depthTensor(bool is_prev = false) const;
 
     // due to indirection, we need to also return the indices of these images.
     ma::py::Tensor sensorIndexTensor() const;
 
     // One reward per species.
-    ma::py::Tensor rewardTensor() const;
+    ma::py::Tensor rewardTensor(bool is_prev = false) const;
     ma::py::Tensor speciesCountTensor() const;
 
-    ma::py::Tensor positionTensor() const;
-    ma::py::Tensor healthTensor() const;
-    ma::py::Tensor surroundingTensor() const;
+    ma::py::Tensor positionTensor(bool is_prev = false) const;
+    ma::py::Tensor healthTensor(bool is_prev = false) const;
+    ma::py::Tensor surroundingTensor(bool is_prev = false) const;
 
-    ma::py::Tensor actionTensor() const;
+    ma::py::Tensor actionTensor(bool is_prev = false) const;
 
     void setAction(uint32_t agent_idx,
                    int32_t forward,
