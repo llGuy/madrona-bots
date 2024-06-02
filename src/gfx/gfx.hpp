@@ -2,8 +2,10 @@
 
 #include "entry/mgr.hpp"
 
+#include <functional>
+
 // This will require initializing just like the manager
-struct ScriptBotsViewer : Manager {
+struct ScriptBotsViewer {
     struct Config {
         int gpuID; // Which GPU for CUDA backend?
         uint32_t numWorlds; // Simulation batch size
@@ -16,13 +18,23 @@ struct ScriptBotsViewer : Manager {
     };
 
     ScriptBotsViewer(const Config &cfg);
-    ~ScriptBotsViewer() override;
+    ~ScriptBotsViewer();
 
-    void loop();
+    Manager *getManager();
+
+    template <typename StepFn>
+    void loop(StepFn &&step_fn)
+    {
+        loopImpl([](void *data) {
+            auto *step_fn_ptr = (StepFn *)data;
+            (*step_fn_ptr)();
+        }, (void *)&step_fn);
+    }
 
 private:
+    void loopImpl(void (*step_fn)(void *data), void *step_fn_data);
+
     struct ViewerImpl;
 
     ViewerImpl *impl_;
 };
-

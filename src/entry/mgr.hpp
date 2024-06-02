@@ -23,7 +23,7 @@ public:
     };
 
     Manager(const Config &cfg);
-    virtual ~Manager();
+    ~Manager();
 
     void step();
 

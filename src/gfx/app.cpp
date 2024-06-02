@@ -18,5 +18,7 @@ int main(int argc, char **argv)
 
     ScriptBotsViewer viewer(cfg);
 
-    viewer.loop();
+    Manager *mgr = viewer.getManager();
+
+    viewer.loop([&]() { mgr->step(); });
 }

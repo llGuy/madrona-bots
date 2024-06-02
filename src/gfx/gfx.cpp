@@ -55,6 +55,7 @@ static inline ma::render::RenderManager initRenderManager(
 }
 
 struct ScriptBotsViewer::ViewerImpl {
+    Manager *simMgr;
     ma::WindowManager wm;
     ma::WindowHandle window;
     ma::render::GPUHandle renderGPU;
@@ -90,6 +91,17 @@ struct ScriptBotsViewer::ViewerImpl {
 
         loadRenderObjects(render_mgr);
 
+        Manager::Config cfg = {
+            .gpuID = viz_cfg.gpuID,
+            .numWorlds = viz_cfg.numWorlds,
+            .randSeed = viz_cfg.randSeed,
+            .initNumAgentsPerWorld = viz_cfg.initNumAgentsPerWorld,
+            .sensorSize = 32,
+            .renderBridge = (void *)render_mgr.bridge()
+        };
+
+        Manager *mgr = new Manager(cfg);
+
         ma::math::Quat initial_camera_rotation =
             (ma::math::Quat::angleAxis(-ma::math::pi / 2.f, ma::math::up) *
              ma::math::Quat::angleAxis(-ma::math::pi / 2.f, ma::math::right)).normalize();
@@ -113,7 +125,7 @@ struct ScriptBotsViewer::ViewerImpl {
         uint32_t *sensor_idx_ptr = (uint32_t *)ma::cu::allocReadback(sizeof(uint32_t));
 
         return new ViewerImpl {
-            // .simMgr = mgr,
+            .simMgr = mgr,
             .wm = std::move(wm),
             .window = std::move(window),
             .renderGPU = std::move(render_gpu),
@@ -130,17 +142,7 @@ struct ScriptBotsViewer::ViewerImpl {
 };
 
 ScriptBotsViewer::ScriptBotsViewer(const Config &cfg)
-    : Manager(Manager::Config {
-          // I'm so sorry, this is hacky as shit but I need the viewer impl to
-          // be initialized before the manager.
-          .gpuID = (impl_ = ViewerImpl::make(cfg), 
-                  cfg.gpuID),
-          .numWorlds = cfg.numWorlds,
-          .randSeed = cfg.randSeed,
-          .initNumAgentsPerWorld = cfg.initNumAgentsPerWorld,
-          .sensorSize = 32,
-          .renderBridge = (void *)impl_->renderMgr.bridge()
-      })
+    : impl_(ViewerImpl::make(cfg))
 {
 }
 
@@ -149,7 +151,7 @@ ScriptBotsViewer::~ScriptBotsViewer()
     
 }
 
-void ScriptBotsViewer::loop()
+void ScriptBotsViewer::loopImpl(void (*step)(void *data), void *data)
 {
     // Readback for the sensor information
     int64_t num_bytes = 32;
@@ -157,6 +159,8 @@ void ScriptBotsViewer::loop()
     uint8_t *semantic_ptr = impl_->semanticPtr;
 
     uint32_t *sensor_idx_ptr = impl_->sensorIdxPtr;
+
+    Manager &mgr = *impl_->simMgr;
 
     impl_->viewer.loop(
         // Function for controling input that affects the whole world
@@ -181,16 +185,16 @@ void ScriptBotsViewer::loop()
             if (input.keyPressed(Key::Space)) shoot = 1;
             if (input.keyPressed(Key::Q)) breed = 1;
 
-            uint32_t *sensor_idx_tensor = (uint32_t *)(this->sensorIndexTensor().devicePtr());
+            uint32_t *sensor_idx_tensor = (uint32_t *)(mgr.sensorIndexTensor().devicePtr());
 
-            int32_t global_agent_idx = this->agentOffsetForWorld(impl_->inspectingWorldIdx) +
+            int32_t global_agent_idx = mgr.agentOffsetForWorld(impl_->inspectingWorldIdx) +
                                         impl_->inspectingAgentIdx;
 
             cudaMemcpy(sensor_idx_ptr, sensor_idx_tensor + global_agent_idx,
                     sizeof(uint32_t), cudaMemcpyDeviceToHost);
 
             // For now, we only control the agent of the first world.
-            this->setAction(*sensor_idx_ptr, 
+            mgr.setAction(*sensor_idx_ptr, 
                           forward, backward, rotate_left, rotate_right, shoot, breed);
 
             impl_->inspectingAgentIdx = agent_idx;
@@ -198,7 +202,9 @@ void ScriptBotsViewer::loop()
         }, 
         // Function for controlling what happens during a step
         [&]() {
-            this->step();
+            // mgr.step();
+            step(data);
+
             impl_->renderMgr.readECS();
         }, 
         // Function for controlling extra UI we might want to have.
@@ -211,12 +217,12 @@ void ScriptBotsViewer::loop()
 
             uint32_t rt_output_offset = 0;
 
-            uint8_t *depth_tensor = (uint8_t *)(this->depthTensor().devicePtr());
-            int8_t *semantic_tensor = (int8_t *)(this->semanticTensor().devicePtr());
+            uint8_t *depth_tensor = (uint8_t *)(mgr.depthTensor().devicePtr());
+            int8_t *semantic_tensor = (int8_t *)(mgr.semanticTensor().devicePtr());
 
-            uint32_t *sensor_idx_tensor = (uint32_t *)(this->sensorIndexTensor().devicePtr());
+            uint32_t *sensor_idx_tensor = (uint32_t *)(mgr.sensorIndexTensor().devicePtr());
 
-            int32_t global_agent_idx = this->agentOffsetForWorld(impl_->inspectingWorldIdx) +
+            int32_t global_agent_idx = mgr.agentOffsetForWorld(impl_->inspectingWorldIdx) +
                                         impl_->inspectingAgentIdx;
 
             cudaMemcpy(sensor_idx_ptr, sensor_idx_tensor + global_agent_idx,
@@ -298,4 +304,9 @@ void ScriptBotsViewer::loop()
 
             ImGui::End();
         });
+}
+
+Manager *ScriptBotsViewer::getManager()
+{
+    return impl_->simMgr;
 }

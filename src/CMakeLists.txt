@@ -43,6 +43,23 @@ else()
     message(FATAL_ERROR "GPU code not supported!")
 endif()
 
+add_library(madrona_bots_gfx
+    gfx/gfx.cpp
+    gfx/assets.cpp
+)
+
+target_link_libraries(madrona_bots_gfx PRIVATE
+    madrona_bots_mgr madrona_mw_core madrona_viz madrona_cuda stb
+)
+
+target_compile_definitions(madrona_bots_gfx PRIVATE
+    -DDATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../data/"
+)
+
+
+
+
+
 add_executable(madrona_bots_test
     entry/test.cpp
 )
@@ -56,19 +73,18 @@ madrona_python_module(madrona_bots
 )
 
 target_link_libraries(madrona_bots PRIVATE
-    madrona_bots_mgr
+    madrona_bots_mgr madrona_bots_gfx
 )
 
 add_executable(madrona_bots_app
     gfx/app.cpp
-    gfx/assets.cpp
-    gfx/gfx.cpp
 )
+
+
+
+
+
 
 target_link_libraries(madrona_bots_app PRIVATE
-    madrona_bots_mgr madrona_mw_core madrona_viz madrona_cuda stb
-)
-
-target_compile_definitions(madrona_bots_app PRIVATE
-    -DDATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../data/"
+    madrona_bots_gfx madrona_python_utils
 )

@@ -1,4 +1,5 @@
 #include "mgr.hpp"
+#include "gfx/gfx.hpp"
 
 #include <madrona/macros.hpp>
 #include <madrona/py/bindings.hpp>
@@ -38,5 +39,35 @@ NB_MODULE(madrona_bots, m) {
         .def("health_tensor", &Manager::healthTensor)
         .def("surrounding_tensor", &Manager::surroundingTensor)
         .def("action_tensor", &Manager::actionTensor)
+    ;
+
+    nb::class_<ScriptBotsViewer> (m, "ScriptBotsViewer")
+        .def("__init__", [](ScriptBotsViewer *self,
+                            int64_t gpu_id,
+                            int64_t num_worlds,
+                            int64_t rand_seed,
+                            int64_t init_num_agents_per_world,
+                            int64_t window_width,
+                            int64_t window_height) {
+            new (self) ScriptBotsViewer(ScriptBotsViewer::Config {
+                .gpuID = (int)gpu_id,
+                .numWorlds = (uint32_t)num_worlds,
+                .randSeed = (uint32_t)rand_seed,
+                .initNumAgentsPerWorld = (uint32_t)init_num_agents_per_world,
+                .windowWidth = (uint32_t)window_width,
+                .windowHeight = (uint32_t)window_height
+            });
+        }, nb::arg("gpu_id"),
+           nb::arg("num_worlds"),
+           nb::arg("rand_seed"),
+           nb::arg("init_num_agents_per_world"),
+           nb::arg("window_width"),
+           nb::arg("window_height"))
+        // .def("loop", &ScriptBotsViewer::loop)
+        .def("loop", [](ScriptBotsViewer *self, 
+                        nb::callable step_fn) {
+            self->loop([&] () { step_fn(); });
+        }, nb::arg("step_fn"))
+        .def("get_sim_mgr", &ScriptBotsViewer::getManager, nb::rv_policy::reference)
     ;
 }
