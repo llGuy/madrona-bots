@@ -103,6 +103,7 @@ class ActorCritic(nn.Module):
         action_probs = self.a2c_nets.actor(shared_out)
         value = self.a2c_nets.critic(shared_out)
         return action_probs, value
+        
 
     def forward_td_zero(self, observations):
         action_probs, values = self.forward(observations.to(self.device))

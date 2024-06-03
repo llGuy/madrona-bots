@@ -11,20 +11,20 @@ def set_seed(seed_value):
     np.random.seed(seed_value)
     torch.manual_seed(seed_value)
 
-def construct_obs(sim_mgr: SimManager, start, end, verbose=False):
+def construct_obs(sim_mgr: SimManager, start, end, prev=False, verbose=False):
     # i: ending index for species
     if verbose:
-        print("Shape of depth tensor: ", sim_mgr.depth_tensor().to_torch()[start:end, :].shape)
-        print("Shape of health tensor: ", sim_mgr.health_tensor().to_torch()[start:end, :].shape)
-        print("Shape of position tensor: ", sim_mgr.position_tensor().to_torch()[start:end, :].shape)
-        print("Shape of semantic tensor: ", sim_mgr.semantic_tensor().to_torch()[start:end, :].shape)
-        print("Shape of surrounding tensor: ", sim_mgr.surrounding_tensor().to_torch()[start:end, :].shape)
+        print("Shape of depth tensor: ", sim_mgr.depth_tensor(prev).to_torch()[start:end, :].shape)
+        print("Shape of health tensor: ", sim_mgr.health_tensor(prev).to_torch()[start:end, :].shape)
+        print("Shape of position tensor: ", sim_mgr.position_tensor(prev).to_torch()[start:end, :].shape)
+        print("Shape of semantic tensor: ", sim_mgr.semantic_tensor(prev).to_torch()[start:end, :].shape)
+        print("Shape of surrounding tensor: ", sim_mgr.surrounding_tensor(prev).to_torch()[start:end, :].shape)
         
-    observations = torch.cat((sim_mgr.depth_tensor().to_torch()[start:end, :],
-                        sim_mgr.health_tensor().to_torch()[start:end, :],
-                        sim_mgr.position_tensor().to_torch()[start:end, :],
-                        sim_mgr.semantic_tensor().to_torch()[start:end, :],
-                        sim_mgr.surrounding_tensor().to_torch()[start:end, :],
+    observations = torch.cat((sim_mgr.depth_tensor(prev).to_torch()[start:end, :],
+                        sim_mgr.health_tensor(prev).to_torch()[start:end, :],
+                        sim_mgr.position_tensor(prev).to_torch()[start:end, :],
+                        sim_mgr.semantic_tensor(prev).to_torch()[start:end, :],
+                        sim_mgr.surrounding_tensor(prev).to_torch()[start:end, :],
                        ), dim=1)
     return observations
 
