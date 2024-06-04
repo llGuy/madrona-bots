@@ -534,7 +534,7 @@ inline void healthSync(Engine &ctx,
     }
 
     // Each agent loses 5 health per tick
-    health.v -= 1;
+    // health.v -= 1;
 
     if (health.v <= 0) {
         // Destroy myself!
@@ -743,8 +743,12 @@ inline void speciesInfoSync(Engine &ctx,
                             SpeciesCount &counts,
                             SpeciesReward &rewards)
 {
+    uint32_t total_num_entities = 0;
+
     for (int i = 0; i < kNumSpecies; ++i) {
         uint32_t count = tracker.countTracker[i].load_relaxed();
+        total_num_entities += count;
+
         uint32_t total_health = tracker.healthTracker[i].load_relaxed();
 
         float health_avg = (float)total_health / (float)count;
@@ -998,7 +1002,8 @@ Sim::Sim(Engine &ctx,
       cellDim(cfg.cellDim),
       simBridge(cfg.simBridge),
       totalAllowedFood(cfg.totalAllowedFood),
-      currentNumFood(0)
+      currentNumFood(0),
+      shouldReset(false)
 {
     initWorld(ctx, numChunksX, numChunksY, cfg.initNumAgentsPerWorld);
 
