@@ -533,6 +533,9 @@ inline void healthSync(Engine &ctx,
         }
     }
 
+    // Each agent loses 5 health per tick
+    health.v -= 1;
+
     if (health.v <= 0) {
         // Destroy myself!
         ma::render::RenderingSystem::cleanupViewingEntity(ctx, e);
