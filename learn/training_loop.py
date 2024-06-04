@@ -8,23 +8,23 @@ from ckpt import CheckpointManager
 from madrona_bots import SimManager, ScriptBotsViewer
 from models import ActorCritic, SpeciesNetGenerator
 from util import construct_obs, set_seed
-
+from pdb import set_trace as T
 
 
 class TrainLoopManager:
     def __init__(self, gpu_id, num_worlds, rand_seed, init_num_agents_per_world):
         self.sim_mgr = SimManager(gpu_id, num_worlds, rand_seed, init_num_agents_per_world)
 
-    def loop(self, num_epochs, callable, carry):
-        for epoch in range(1, num_epochs + 1):
-            print("Epoch ", epoch)
-            callable(epoch, carry)
+    def loop(self, start_epochs, num_epochs, callable, carry):
+        for relative_epoch in range(1, num_epochs + 1):
+            print("Relative Epoch ", relative_epoch)
+            callable(start_epochs, relative_epoch, carry)
 
     def get_sim_mgr(self):
         return self.sim_mgr
 
 
-def train_step(epoch, carry):
+def train_step(start_epochs, relative_epoch, carry):
     sim_mgr, time_values, args, checkpoint_manager, \
             species_nets, species_optims, \
             best_species_actor_loss, best_species_total_loss, \
@@ -47,6 +47,7 @@ def train_step(epoch, carry):
 
     for sp_idx, (sp_start, sp_end) in enumerate(zip(species_start_offsets, species_end_offsets)):
         print("\nSpecies ", sp_idx + 1)
+        epoch = start_epochs[sp_idx] + relative_epoch
         model = species_nets[sp_idx]
         observations = construct_obs(sim_mgr, sp_start, sp_end, prev=False)
         action_probs, new_critic_values = model.forward(observations)
@@ -105,7 +106,6 @@ def construct_run_name(args):
     return run_name
 
 def train(args):
-    set_seed(0)
     run_name = construct_run_name(args)
     if args.use_wandb:
         wandb.init(project="madrona-bots", name=run_name, config=args)
@@ -116,6 +116,7 @@ def train(args):
     rand_seed = 0
     init_num_agents_per_world = 32
 
+    set_seed(rand_seed)
     train_loop_mgr = None
 
     if args.enable_viewer:
@@ -142,6 +143,7 @@ def train(args):
     def reinit_fn(config=None):
         return ActorCritic(args.obs_dim, args.action_dim, args.hidden_dim, species_generator, device, config)
 
+    start_epochs = []
     for species_id in range(1, args.num_species + 1):
         if args.create_universe:
             print(f"Creating universe: new model for species {species_id}...")
@@ -149,9 +151,11 @@ def train(args):
             print(f"Species {species_id} model: ", model.get_config())
             optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
             checkpoint_manager.save(model, optimizer, f"species_{species_id}", 0, metric_name="latest")
+            start_epochs.append(0)
         else:
             print(f"Loading cached model for species {species_id}...")
-            model, optimizer = checkpoint_manager.load(ActorCritic, torch.optim.Adam, f"species_{species_id}", init_fn=reinit_fn, metric_name=args.model_load)
+            model, optimizer, loaded_epoch = checkpoint_manager.load(ActorCritic, torch.optim.Adam, f"species_{species_id}", init_fn=reinit_fn, metric_name=args.model_load)
+            start_epochs.append(loaded_epoch)
         species_nets.append(model)
         species_optims.append(optimizer)
 
@@ -163,7 +167,7 @@ def train(args):
              species_nets, species_optims, \
              best_species_actor_loss, best_species_total_loss, \
              best_species_critic_loss, device)
-    train_loop_mgr.loop(args.num_epochs, train_step, carry)
+    train_loop_mgr.loop(start_epochs, args.num_epochs, train_step, carry)
 
     np_time_values = np.array(time_values)
     avg_time = np_time_values.mean()
