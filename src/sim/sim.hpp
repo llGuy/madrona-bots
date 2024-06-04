@@ -146,6 +146,8 @@ struct Sim : ma::WorldBase {
     ma::AtomicI32 currentNumFood;
 
     ma::Entity speciesInfoTracker;
+
+    bool shouldReset;
 };
 
 class Engine : public ::ma::CustomContext<Engine, Sim> {

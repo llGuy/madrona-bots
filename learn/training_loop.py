@@ -11,24 +11,25 @@ from util import construct_obs, set_seed
 from pdb import set_trace as T
 
 
+# This is for headless training
 class TrainLoopManager:
     def __init__(self, gpu_id, num_worlds, rand_seed, init_num_agents_per_world):
         self.sim_mgr = SimManager(gpu_id, num_worlds, rand_seed, init_num_agents_per_world)
 
-    def loop(self, start_epochs, num_epochs, callable, carry):
+    def loop(self, num_epochs, callable, carry):
         for relative_epoch in range(1, num_epochs + 1):
             print("Relative Epoch ", relative_epoch)
-            callable(start_epochs, relative_epoch, carry)
+            callable(relative_epoch, carry)
 
     def get_sim_mgr(self):
         return self.sim_mgr
 
 
-def train_step(start_epochs, relative_epoch, carry):
+def train_step(relative_epoch, carry):
     sim_mgr, time_values, args, checkpoint_manager, \
             species_nets, species_optims, \
             best_species_actor_loss, best_species_total_loss, \
-            best_species_critic_loss, device = carry
+            best_species_critic_loss, device, start_epochs = carry
 
     start = time.time()
     sim_mgr.step()
@@ -166,8 +167,9 @@ def train(args):
     carry = (sim_mgr, time_values, args, checkpoint_manager, \
              species_nets, species_optims, \
              best_species_actor_loss, best_species_total_loss, \
-             best_species_critic_loss, device)
-    train_loop_mgr.loop(start_epochs, args.num_epochs, train_step, carry)
+             best_species_critic_loss, device, start_epochs)
+
+    train_loop_mgr.loop(args.num_epochs, train_step, carry)
 
     np_time_values = np.array(time_values)
     avg_time = np_time_values.mean()

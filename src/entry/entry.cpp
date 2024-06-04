@@ -71,7 +71,9 @@ NB_MODULE(madrona_bots, m) {
                         nb::object carry) {
             uint32_t current_epoch = 1;
             self->loop([&] () { step_fn(current_epoch++, carry); });
-        }, nb::arg("num_epochs"), nb::arg("step_fn"), nb::arg("carry"))
+        }, nb::arg("num_epochs"), 
+           nb::arg("step_fn"),
+           nb::arg("carry"))
         .def("get_sim_mgr", &ScriptBotsViewer::getManager, nb::rv_policy::reference)
     ;
 }
