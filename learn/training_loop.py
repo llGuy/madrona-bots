@@ -141,7 +141,7 @@ def train(args):
     species_generator = SpeciesNetGenerator(args.obs_dim, args.action_dim, args.hidden_dim)
 
     def reinit_fn(config=None):
-        return ActorCritic(args.obs_dim, args.action_dim, args.hidden_dim, species_generator, device, config)
+        return ActorCritic(args.obs_dim, args.action_dim, species_generator, device, config)
 
     start_epochs = []
     for species_id in range(1, args.num_species + 1):
