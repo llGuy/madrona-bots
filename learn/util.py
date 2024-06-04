@@ -28,6 +28,7 @@ def construct_obs(sim_mgr: SimManager, start, end, prev=False, verbose=False):
                        ), dim=1)
     return observations
 
+# TODO: delete this
 def create_universe(universe_id, num_species, input_dim, output_dim, hidden_dim, device='cpu', lr=3e-4):
     universe_dir = f"checkpoints/universe_{universe_id}/"
     if os.path.exists(universe_dir):

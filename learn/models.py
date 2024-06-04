@@ -66,8 +66,10 @@ class ActorCritic(nn.Module):
         self.action_dim = action_dim
         self.device = device
         if config:
+            print("Loading model from config")
             self.a2c_nets = self._build_from_config(config).to(device)
         else:
+            print("Creating new model")
             self.a2c_nets = species_generator._create_random_net().to(device)
         self.add_module('a2c_nets', self.a2c_nets)
 
@@ -113,10 +115,10 @@ class ActorCritic(nn.Module):
         return actions, selected_log_probs, values
     
     @staticmethod
-    def compute_loss(action_p_vals, G, V, critic_loss=nn.SmoothL1Loss()):
-        assert len(action_p_vals) == len(G) == len(V)
-        advantage = G - V.detach().squeeze()
+    def compute_loss(action_log_probs, reward, prev_V, new_V, critic_loss=nn.SmoothL1Loss(), gamma=1.0):
+        assert len(action_log_probs) == len(reward) == len(prev_V) == len(new_V)
+        advantage = reward + (gamma * new_V.detach().squeeze()) - prev_V.detach().squeeze()
         # T()
-        return -(torch.sum(action_p_vals * advantage)), critic_loss(G, V.squeeze())
+        return -(torch.sum(action_log_probs * advantage)), critic_loss(reward, prev_V.squeeze())
         
 # num entities per agents: rows are worlds, columns are species; same thing for rewards
