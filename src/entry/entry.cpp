@@ -66,9 +66,12 @@ NB_MODULE(madrona_bots, m) {
            nb::arg("window_height"))
         // .def("loop", &ScriptBotsViewer::loop)
         .def("loop", [](ScriptBotsViewer *self, 
-                        nb::callable step_fn) {
-            self->loop([&] () { step_fn(); });
-        }, nb::arg("step_fn"))
+                        int num_epochs,
+                        nb::callable step_fn,
+                        nb::object carry) {
+            uint32_t current_epoch = 1;
+            self->loop([&] () { step_fn(current_epoch++, carry); });
+        }, nb::arg("num_epochs"), nb::arg("step_fn"), nb::arg("carry"))
         .def("get_sim_mgr", &ScriptBotsViewer::getManager, nb::rv_policy::reference)
     ;
 }

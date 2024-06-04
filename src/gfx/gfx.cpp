@@ -225,6 +225,7 @@ void ScriptBotsViewer::loopImpl(void (*step)(void *data), void *data)
             int32_t global_agent_idx = mgr.agentOffsetForWorld(impl_->inspectingWorldIdx) +
                                         impl_->inspectingAgentIdx;
 
+#if 0
             cudaMemcpy(sensor_idx_ptr, sensor_idx_tensor + global_agent_idx,
                     sizeof(uint32_t), cudaMemcpyDeviceToHost);
 
@@ -233,6 +234,15 @@ void ScriptBotsViewer::loopImpl(void (*step)(void *data), void *data)
                     cudaMemcpyDeviceToHost);
 
             cudaMemcpy(semantic_ptr, semantic_tensor + (*sensor_idx_ptr) * num_bytes,
+                    num_bytes,
+                    cudaMemcpyDeviceToHost);
+#endif
+
+            cudaMemcpy(depth_ptr, depth_tensor,
+                    num_bytes,
+                    cudaMemcpyDeviceToHost);
+
+            cudaMemcpy(semantic_ptr, semantic_tensor,
                     num_bytes,
                     cudaMemcpyDeviceToHost);
 

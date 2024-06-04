@@ -5,9 +5,98 @@ import time
 import argparse
 import wandb
 from ckpt import CheckpointManager
-from madrona_bots import SimManager
+from madrona_bots import SimManager, ScriptBotsViewer
 from models import ActorCritic, SpeciesNetGenerator
 from util import construct_obs, set_seed
+
+
+
+class TrainLoopManager:
+    def __init__(self, gpu_id, num_worlds, rand_seed, init_num_agents_per_world):
+        self.sim_mgr = SimManager(gpu_id, num_worlds, rand_seed, init_num_agents_per_world)
+
+    def loop(self, num_epochs, callable, carry):
+        for epoch in range(1, num_epochs + 1):
+            print("Epoch ", epoch)
+            callable(epoch, carry)
+
+    def get_sim_mgr(self):
+        return self.sim_mgr
+
+
+def train_step(epoch, carry):
+    sim_mgr, time_values, args, checkpoint_manager, \
+            species_nets, species_optims, \
+            best_species_actor_loss, best_species_total_loss, \
+            best_species_critic_loss, device = carry
+
+    start = time.time()
+    sim_mgr.step()
+    end = time.time()
+    epoch_duration = end - start
+    time_values.append(epoch_duration)
+    if args.use_wandb:
+        wandb.log({"epoch_fps": args.num_worlds / epoch_duration})
+
+    species_counts = sim_mgr.species_count_tensor().to_torch()
+    species_end_offsets = species_counts.sum(dim=0).cumsum(dim=0, dtype=int)
+    species_start_offsets = torch.cat((torch.zeros(1, dtype=torch.int, device=device), species_end_offsets[:-1]))
+
+    action_tensor = sim_mgr.action_tensor(False).to_torch()
+    all_rewards = sim_mgr.reward_tensor(False).to_torch().clone()
+
+    for sp_idx, (sp_start, sp_end) in enumerate(zip(species_start_offsets, species_end_offsets)):
+        print("\nSpecies ", sp_idx + 1)
+        model = species_nets[sp_idx]
+        observations = construct_obs(sim_mgr, sp_start, sp_end, prev=False)
+        action_probs, new_critic_values = model.forward(observations)
+        actions = torch.distributions.Categorical(logits=action_probs).sample()
+
+        one_hot_actions = torch.zeros(actions.size(0), args.action_dim, device=device)
+        one_hot_actions.scatter_(1, actions.unsqueeze(1), 1)
+
+        optimizer = species_optims[sp_idx]
+        rewards = all_rewards[sp_start:sp_end, :]
+        prev_observations = construct_obs(sim_mgr, sp_start, sp_end, prev=True)
+        prev_action_probs, prev_critic_values = model.forward(prev_observations.to(model.device))
+        prev_actions = action_tensor[sp_start:sp_end, :].argmax(dim=1)
+        prev_action_log_probs = prev_action_probs[torch.arange(prev_actions.shape[0]), prev_actions]
+        actor_loss, critic_loss = model.compute_loss(prev_action_log_probs, rewards.flatten(), prev_critic_values.flatten(), new_critic_values.flatten())
+
+        optimizer.zero_grad()
+        total_loss = actor_loss + critic_loss
+        print("Actor: ", actor_loss.item(), "; Critic: ", critic_loss.item())
+        print("Total Loss: ", total_loss.item())
+        total_loss.backward()
+        optimizer.step()
+
+        if args.use_wandb:
+            wandb.log({
+                f"species_{sp_idx+1}_actor_loss": actor_loss.item(),
+                f"species_{sp_idx+1}_critic_loss": critic_loss.item(),
+                f"species_{sp_idx+1}_total_loss": total_loss.item(),
+                f"species_{sp_idx+1}_count": sp_end - sp_start,
+                f"species_{sp_idx+1}_reward": rewards.sum().item(), 
+                f"species_{sp_idx+1}_learning_rate": optimizer.param_groups[0]['lr'],
+                "epoch": epoch,
+            })
+        checkpoint_manager.save(model, optimizer, f"species_{sp_idx+1}", epoch, metric_name='latest')
+        
+        if actor_loss < best_species_actor_loss[sp_idx]:
+            best_species_actor_loss[sp_idx] = actor_loss
+            checkpoint_manager.save(model, optimizer, f"species_{sp_idx+1}", epoch, metric_name='actor_loss')
+        
+        if critic_loss < best_species_critic_loss[sp_idx]:
+            best_species_critic_loss[sp_idx] = critic_loss
+            checkpoint_manager.save(model, optimizer, f"species_{sp_idx+1}", epoch, metric_name='critic_loss')
+        
+        if total_loss < best_species_total_loss[sp_idx]:
+            best_species_total_loss[sp_idx] = total_loss
+            checkpoint_manager.save(model, optimizer, f"species_{sp_idx+1}", epoch, metric_name='total_loss')
+        
+        sim_mgr.shift_observations()
+        action_tensor[sp_start:sp_end, :] = one_hot_actions.int()
+
 
 def construct_run_name(args):
     # reward_type_id = '0' # first attempt of reward function definition
@@ -22,7 +111,21 @@ def train(args):
         wandb.init(project="madrona-bots", name=run_name, config=args)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    sim_mgr = SimManager(0, args.num_worlds, 69, 32)
+    #sim_mgr = SimManager(0, args.num_worlds, 69, 32)
+    gpu_id = 0
+    rand_seed = 0
+    init_num_agents_per_world = 32
+
+    train_loop_mgr = None
+
+    if args.enable_viewer:
+        train_loop_mgr = ScriptBotsViewer(gpu_id, args.num_worlds, \
+                rand_seed, init_num_agents_per_world,              \
+                1375, 768)
+    else:
+        train_loop_mgr = TrainLoopManager(gpu_id, args.num_worlds, \
+                rand_seed, init_num_agents_per_world)
+
     base_ckpt_dir = f"{args.model_save_dir}/universe_{args.universe_id}"
     species_nets, species_optims = [], []
     best_species_actor_loss, best_species_critic_loss = [float('inf') for _ in range(args.num_species)], [float('inf') for _ in range(args.num_species)]
@@ -54,76 +157,13 @@ def train(args):
 
     time_values = []
 
-    for epoch in range(1, args.num_epochs + 1):
-        print("Epoch ", epoch)
-        start = time.time()
-        sim_mgr.step()
-        end = time.time()
-        epoch_duration = end - start
-        time_values.append(epoch_duration)
-        if args.use_wandb:
-            wandb.log({"epoch_fps": args.num_worlds / epoch_duration})
+    sim_mgr = train_loop_mgr.get_sim_mgr()
 
-        species_counts = sim_mgr.species_count_tensor().to_torch()
-        species_end_offsets = species_counts.sum(dim=0).cumsum(dim=0, dtype=int)
-        species_start_offsets = torch.cat((torch.zeros(1, dtype=torch.int, device=device), species_end_offsets[:-1]))
-
-        action_tensor = sim_mgr.action_tensor(False).to_torch()
-        all_rewards = sim_mgr.reward_tensor(False).to_torch().clone()
-
-        for sp_idx, (sp_start, sp_end) in enumerate(zip(species_start_offsets, species_end_offsets)):
-            print("\nSpecies ", sp_idx + 1)
-            model = species_nets[sp_idx]
-            observations = construct_obs(sim_mgr, sp_start, sp_end, prev=False)
-            action_probs, new_critic_values = model.forward(observations)
-            actions = torch.distributions.Categorical(logits=action_probs).sample()
-
-            one_hot_actions = torch.zeros(actions.size(0), args.action_dim, device=device)
-            one_hot_actions.scatter_(1, actions.unsqueeze(1), 1)
-
-            # if epoch > 1:
-            if True: # always backprop
-                optimizer = species_optims[sp_idx]
-                rewards = all_rewards[sp_start:sp_end, :]
-                prev_observations = construct_obs(sim_mgr, sp_start, sp_end, prev=True)
-                prev_action_probs, prev_critic_values = model.forward(prev_observations.to(model.device))
-                prev_actions = action_tensor[sp_start:sp_end, :].argmax(dim=1)
-                prev_action_log_probs = prev_action_probs[torch.arange(prev_actions.shape[0]), prev_actions]
-                actor_loss, critic_loss = model.compute_loss(prev_action_log_probs, rewards.flatten(), prev_critic_values.flatten(), new_critic_values.flatten())
-
-                optimizer.zero_grad()
-                total_loss = actor_loss + critic_loss
-                print("Actor: ", actor_loss.item(), "; Critic: ", critic_loss.item())
-                print("Total Loss: ", total_loss.item())
-                total_loss.backward()
-                optimizer.step()
-
-                if args.use_wandb:
-                    wandb.log({
-                        f"species_{sp_idx+1}_actor_loss": actor_loss.item(),
-                        f"species_{sp_idx+1}_critic_loss": critic_loss.item(),
-                        f"species_{sp_idx+1}_total_loss": total_loss.item(),
-                        f"species_{sp_idx+1}_count": sp_end - sp_start,
-                        f"species_{sp_idx+1}_reward": rewards.sum().item(), 
-                        f"species_{sp_idx+1}_learning_rate": optimizer.param_groups[0]['lr'],
-                        "epoch": epoch,
-                    })
-                checkpoint_manager.save(model, optimizer, f"species_{sp_idx+1}", epoch, metric_name='latest')
-                
-                if actor_loss < best_species_actor_loss[sp_idx]:
-                    best_species_actor_loss[sp_idx] = actor_loss
-                    checkpoint_manager.save(model, optimizer, f"species_{sp_idx+1}", epoch, metric_name='actor_loss')
-                
-                if critic_loss < best_species_critic_loss[sp_idx]:
-                    best_species_critic_loss[sp_idx] = critic_loss
-                    checkpoint_manager.save(model, optimizer, f"species_{sp_idx+1}", epoch, metric_name='critic_loss')
-                
-                if total_loss < best_species_total_loss[sp_idx]:
-                    best_species_total_loss[sp_idx] = total_loss
-                    checkpoint_manager.save(model, optimizer, f"species_{sp_idx+1}", epoch, metric_name='total_loss')
-                
-                sim_mgr.shift_observations()
-                action_tensor[sp_start:sp_end, :] = one_hot_actions.int()
+    carry = (sim_mgr, time_values, args, checkpoint_manager, \
+             species_nets, species_optims, \
+             best_species_actor_loss, best_species_total_loss, \
+             best_species_critic_loss, device)
+    train_loop_mgr.loop(args.num_epochs, train_step, carry)
 
     np_time_values = np.array(time_values)
     avg_time = np_time_values.mean()
@@ -146,6 +186,7 @@ def main():
     parser.add_argument('--create_universe', action='store_true', help='Create a new universe')
     parser.add_argument('--model_save_dir', type=str, default='checkpoints', help='Directory to save the model')
     parser.add_argument('--model_load', type=str, default='latest', help='Which model to load')
+    parser.add_argument('--enable_viewer', action='store_true', help='Enable visualizer while training')
     args = parser.parse_args()
 
     train(args)
