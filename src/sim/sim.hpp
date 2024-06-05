@@ -147,7 +147,7 @@ struct Sim : ma::WorldBase {
 
     ma::Entity speciesInfoTracker;
 
-    bool shouldReset;
+    uint32_t initNumAgentsPerWorld;
 };
 
 class Engine : public ::ma::CustomContext<Engine, Sim> {

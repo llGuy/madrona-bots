@@ -193,7 +193,10 @@ static inline ma::Entity makeAgent(Engine &ctx,
         1.f, 1.f, 1.f
     };
 
-    ctx.get<ma::base::ObjectID>(entity).idx = (int32_t)SimObject::Agent;
+    ctx.get<ma::base::ObjectID>(entity) = {
+        (int32_t)SimObject::Agent,
+        (int32_t)species_id
+    };
 
     // Attach a view to this entity so that sensor data gets generated
     // for it.
@@ -673,6 +676,24 @@ inline void updateObservations(Engine &ctx,
     };
 }
 
+inline void speciesTrackerUpdate(Engine &ctx,
+                                 ma::Entity e,
+                                 AgentObservationBridge &bridge,
+                                 Species species,
+                                 Health health)
+{
+    (void)e, (void)bridge;
+
+    // Update the number of agents in given species
+    auto species_tracker = ctx.data().speciesInfoTracker;
+
+    auto &info_tracker = ctx.get<SpeciesInfoTracker>(species_tracker);
+
+    // LOG("({}) SpeciesID={}\n", &info_tracker, species.speciesID-1);
+    info_tracker.countTracker[species.speciesID-1].fetch_add_relaxed(1);
+    info_tracker.healthTracker[species.speciesID-1].fetch_add_relaxed(health.v);
+}
+
 inline void updateSensorOutputIdx(Engine &ctx,
                                   Species &species,
                                   AgentObservationBridge bridge,
@@ -726,16 +747,6 @@ inline void updateSensorOutputIdx(Engine &ctx,
     // Update the species index too
     ctx.get<ma::render::InstanceData>(
             renderable.renderEntity).speciesIDX = species.speciesID;
-
-
-
-    // Update the number of agents in given species
-    auto species_tracker = ctx.data().speciesInfoTracker;
-
-    auto &info_tracker = ctx.get<SpeciesInfoTracker>(species_tracker);
-
-    info_tracker.countTracker[species.speciesID-1].fetch_add_relaxed(1);
-    info_tracker.healthTracker[species.speciesID-1].fetch_add_relaxed(health.v);
 }
 
 inline void speciesInfoSync(Engine &ctx,
@@ -743,11 +754,16 @@ inline void speciesInfoSync(Engine &ctx,
                             SpeciesCount &counts,
                             SpeciesReward &rewards)
 {
-    uint32_t total_num_entities = 0;
+    float world_lim_x = ctx.data().numChunksX * ChunkInfo::kChunkWidth * 
+                        ctx.data().cellDim;
+    float world_lim_y = ctx.data().numChunksY * ChunkInfo::kChunkWidth * 
+                        ctx.data().cellDim;
+
+    uint32_t init_num_agents_per_species = ctx.data().initNumAgentsPerWorld /
+        kNumSpecies;
 
     for (int i = 0; i < kNumSpecies; ++i) {
         uint32_t count = tracker.countTracker[i].load_relaxed();
-        total_num_entities += count;
 
         uint32_t total_health = tracker.healthTracker[i].load_relaxed();
 
@@ -764,6 +780,20 @@ inline void speciesInfoSync(Engine &ctx,
 
         tracker.countTracker[i].store_relaxed(0);
         tracker.healthTracker[i].store_relaxed(0);
+
+
+        if (count < init_num_agents_per_species) {
+            for (int e_i = count; e_i < init_num_agents_per_species; ++e_i) {
+                float x_pos = ctx.data().rng.sampleUniform() * world_lim_x;
+                float y_pos = ctx.data().rng.sampleUniform() * world_lim_y;
+
+                auto entity = makeAgent(
+                        ctx,
+                        ma::math::Vector3{ x_pos, y_pos, 1.f },
+                        i + 1,
+                        100);
+            }
+        }
     }
 }
 
@@ -889,8 +919,23 @@ static void setupStepTasks(ma::TaskGraphBuilder &builder,
     auto clear_tmp = builder.addToGraph<ma::ResetTmpAllocNode>(
             {update_surrounding_obs_sys});
 
+    auto update_species_tracker = builder.addToGraph<ma::ParallelForNode<Engine,
+        speciesTrackerUpdate,
+            ma::Entity,
+            AgentObservationBridge,
+            Species,
+            Health
+        >>({clear_tmp});
+
+    auto species_info_sys = builder.addToGraph<ma::ParallelForNode<Engine,
+         speciesInfoSync,
+            SpeciesInfoTracker,
+            SpeciesCount,
+            SpeciesReward
+        >>({update_species_tracker});
+
     auto sort_agents = queueSortByWorld<Agent>(
-        builder, {clear_tmp});
+        builder, {species_info_sys});
 
     auto recycle_sys = builder.addToGraph<ma::RecycleEntitiesNode>({sort_agents});
 
@@ -921,20 +966,13 @@ static void setupStepTasks(ma::TaskGraphBuilder &builder,
             Health
         >>({sort_obs});
 
-    auto species_info_sys = builder.addToGraph<ma::ParallelForNode<Engine,
-         speciesInfoSync,
-            SpeciesInfoTracker,
-            SpeciesCount,
-            SpeciesReward
-        >>({update_sensor_idx});
-
     // Conditionally reset the world if the episode is over
     auto reward_sys = builder.addToGraph<ma::ParallelForNode<Engine,
         rewardSystem,
             Species,
             Health,
             AgentObservationBridge
-        >>({species_info_sys});
+        >>({update_sensor_idx});
 
     auto sort_species = queueSortByWorld<SpeciesInfoArchetype>(
             builder, {reward_sys});
@@ -1003,7 +1041,7 @@ Sim::Sim(Engine &ctx,
       simBridge(cfg.simBridge),
       totalAllowedFood(cfg.totalAllowedFood),
       currentNumFood(0),
-      shouldReset(false)
+      initNumAgentsPerWorld(cfg.initNumAgentsPerWorld)
 {
     initWorld(ctx, numChunksX, numChunksY, cfg.initNumAgentsPerWorld);
 

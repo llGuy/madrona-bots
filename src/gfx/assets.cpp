@@ -18,9 +18,9 @@ static std::vector<ma::imp::SourceMaterial> makeMaterials()
     // Material 4 is for the agent's hands (white).
     return {
         { ma::math::Vector4{0.4f, 0.4f, 0.4f, 0.0f}, -1, 0.8f, 0.2f,},
-        { ma::render::rgb8ToFloat(191, 108, 10), -1, 0.8f, 0.2f },
+        { ma::render::rgb8ToFloat(10, 191, 81), -1, 0.8f, 0.2f },
         { ma::math::Vector4{0.5f, 0.3f, 0.3f, 0.0f}, 0, 0.8f, 0.2f,},
-        { ma::math::Vector4{0.1f, 0.1f, 1.0f, 0.0f}, 1, 0.8f, 1.0f,},
+        { ma::math::Vector4{1.0f, 1.0f, 1.0f, 0.0f}, 1, 0.8f, 1.0f,},
         { ma::render::rgb8ToFloat(230, 230, 230),   -1, 0.8f, 1.0f },
     };
 }
@@ -71,9 +71,9 @@ void loadRenderObjects(ma::render::RenderManager &render_mgr)
     // Such that, any time a texture is referenced in the materials, the 
     // ordering is defined by the above.
     auto green_grid_str = (std::filesystem::path(DATA_DIR) /
-           "green_grid.png").string();
+           "orange_grid.png").string();
     auto smile_str = (std::filesystem::path(DATA_DIR) /
-           "smile.png").string();
+           "new_smile2.png").string();
     
     std::vector<ma::imp::SourceTexture> textures = {
         ma::imp::SourceTexture(green_grid_str.c_str()),

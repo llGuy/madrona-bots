@@ -11,11 +11,14 @@ namespace ma = madrona;
 static constexpr ImU32 kRandomColorTable[] = {
     IM_COL32(0, 0, 0, 255),
     IM_COL32(170, 0, 0, 255),
-    IM_COL32(0, 170, 0, 255),
+
+    IM_COL32(0, 170, 170, 255),
+
     IM_COL32(0, 0, 170, 255),
     IM_COL32(170, 0, 170, 255),
-    IM_COL32(0, 170, 170, 255),
+
     IM_COL32(170, 170, 0, 255),
+    IM_COL32(0, 170, 0, 255),
     IM_COL32(170, 170, 170, 255),
     IM_COL32(85, 85, 85, 255),
     IM_COL32(255, 85, 85, 255),
