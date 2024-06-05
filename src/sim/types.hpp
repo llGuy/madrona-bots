@@ -166,6 +166,14 @@ struct SpeciesInfoArchetype : ma::Archetype<
     SpeciesReward
 > {};
 
+struct AgentStats {
+    // May use these for reward calculation.
+    bool hitFriendlyAgent;
+    bool hitEnemyAgent;
+    bool ateFood;
+    bool reproduced;
+};
+
 struct Agent : ma::Archetype<
     ma::base::Position,
     ma::base::Rotation,
@@ -191,6 +199,7 @@ struct Agent : ma::Archetype<
     // Reward, episode termination
     Reward,
     Done,
+    AgentStats,
 
 
     // Required or sensory input.

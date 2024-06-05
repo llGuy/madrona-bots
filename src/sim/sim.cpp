@@ -42,6 +42,7 @@ void Sim::registerTypes(ma::ECSRegistry &registry, const Config &cfg)
     registry.registerComponent<HealthObservation>();
     registry.registerComponent<AgentObservationBridge>();
     registry.registerComponent<SensorOutputIndex>();
+    registry.registerComponent<AgentStats>();
 
     registry.registerComponent<PrevSpeciesObservation>();
     registry.registerComponent<PrevPositionObservation>();
@@ -406,7 +407,9 @@ inline void actionSystem(Engine &ctx,
                          AgentType agent_type,
                          Action &action,
                          ma::render::RenderCamera &camera,
-                         AgentObservationBridge &obs_bridge)
+                         AgentObservationBridge &obs_bridge,
+                         Species &species,
+                         AgentStats &agent_stats)
 {
     action = ctx.get<Action>(obs_bridge.obsEntity);
 
@@ -423,6 +426,14 @@ inline void actionSystem(Engine &ctx,
             // Each hit leads to -10 health damage.
             ctx.get<HealthAccumulator>(finder_output->hitEntity).v.
                 fetch_add_relaxed(-10);
+
+            auto &other_species = ctx.get<Species>(finder_output->hitEntity);
+
+            if (other_species.speciesID == species.speciesID) {
+                agent_stats.hitFriendlyAgent = 1;
+            } else {
+                agent_stats.hitEnemyAgent = 1;
+            }
         }
     }
 
@@ -482,7 +493,8 @@ inline void healthSync(Engine &ctx,
                        HealthAccumulator &health_accum,
                        Action &action,
                        Species &species,
-                       ma::render::RenderCamera &camera)
+                       ma::render::RenderCamera &camera,
+                       AgentStats &agent_stats)
 {
     health.v = health_accum.v.load_relaxed();
 
@@ -506,6 +518,8 @@ inline void healthSync(Engine &ctx,
                 // If we managed to consume, break and update health
                 if (food_pkg.consume(ctx)) {
                     health.v += 20.f;
+
+                    agent_stats.ateFood = 1;
 
                     break;
                 }
@@ -532,12 +546,14 @@ inline void healthSync(Engine &ctx,
                                         ma::math::Vector3{pos.x, pos.y, pos.z},
                                         species.speciesID,
                                         50);
+
+                agent_stats.reproduced = 1;
             }
         }
     }
 
     // Each agent loses 5 health per tick
-    // health.v -= 1;
+    health.v -= 1;
 
     if (health.v <= 0) {
         // Destroy myself!
@@ -689,7 +705,6 @@ inline void speciesTrackerUpdate(Engine &ctx,
 
     auto &info_tracker = ctx.get<SpeciesInfoTracker>(species_tracker);
 
-    // LOG("({}) SpeciesID={}\n", &info_tracker, species.speciesID-1);
     info_tracker.countTracker[species.speciesID-1].fetch_add_relaxed(1);
     info_tracker.healthTracker[species.speciesID-1].fetch_add_relaxed(health.v);
 }
@@ -775,8 +790,9 @@ inline void speciesInfoSync(Engine &ctx,
         counts.counts[i] = count;
         
         // (100 is the starting health of all agents)
-        rewards.rewards[i] = (float)count / 256.0f +
-                             health_avg / 100.0f;
+        // Do -2 so that the baseline reward is 0
+        rewards.rewards[i] = (float)count / (float)ctx.data().initNumAgentsPerWorld +
+                             health_avg / 100.0f - 2.f;
 
         tracker.countTracker[i].store_relaxed(0);
         tracker.healthTracker[i].store_relaxed(0);
@@ -798,9 +814,11 @@ inline void speciesInfoSync(Engine &ctx,
 }
 
 inline void rewardSystem(Engine &ctx,
+                         ma::base::Position &position,
                          Species &species,
                          Health &health,
-                         AgentObservationBridge &bridge)
+                         AgentObservationBridge &bridge,
+                         AgentStats &agent_stats)
 {
     SpeciesReward &species_rew = ctx.get<SpeciesReward>(
             ctx.data().speciesInfoTracker);
@@ -808,7 +826,44 @@ inline void rewardSystem(Engine &ctx,
     Reward &reward = ctx.get<Reward>(bridge.obsEntity);
 
     reward.v = species_rew.rewards[species.speciesID] +
-               health.v / 100.f;
+               health.v / 100.f - 0.5f;
+
+
+    // Agent gets penalized for being at the ends of the world
+    float world_lim_x = ctx.data().numChunksX * ChunkInfo::kChunkWidth * 
+                        ctx.data().cellDim;
+    float world_lim_y = ctx.data().numChunksY * ChunkInfo::kChunkWidth * 
+                        ctx.data().cellDim;
+
+    float penalty_radius = 4.f;
+    if (position.x < penalty_radius || position.y < penalty_radius ||
+        position.x > world_lim_x - penalty_radius ||
+        position.y > world_lim_y - penalty_radius) {
+        reward.v -= 1.f;
+    }
+
+
+
+    if (agent_stats.reproduced) {
+        reward.v += 2.f;
+    }
+
+    if (agent_stats.hitFriendlyAgent) {
+        reward.v -= 1.f;
+    }
+
+    if (agent_stats.hitEnemyAgent) {
+        reward.v += 1.5f;
+    }
+
+    if (agent_stats.ateFood) {
+        reward.v += 1.f;
+    }
+
+    agent_stats.reproduced = 0;
+    agent_stats.hitFriendlyAgent = 0;
+    agent_stats.hitEnemyAgent = 0;
+    agent_stats.ateFood = 0;
 }
 
 inline void bridgeSyncSystem(Engine &ctx,
@@ -893,7 +948,9 @@ static void setupStepTasks(ma::TaskGraphBuilder &builder,
             AgentType,
             Action,
             ma::render::RenderCamera,
-            AgentObservationBridge
+            AgentObservationBridge,
+            Species,
+            AgentStats
         >>({add_food_sys});
 
     auto health_sync_sys = builder.addToGraph<ma::ParallelForNode<Engine,
@@ -904,7 +961,8 @@ static void setupStepTasks(ma::TaskGraphBuilder &builder,
             HealthAccumulator,
             Action,
             Species,
-            ma::render::RenderCamera
+            ma::render::RenderCamera,
+            AgentStats,
         >>({action_sys});
 
     auto update_surrounding_obs_sys = builder.addToGraph<ma::ParallelForNode<Engine,
@@ -969,9 +1027,11 @@ static void setupStepTasks(ma::TaskGraphBuilder &builder,
     // Conditionally reset the world if the episode is over
     auto reward_sys = builder.addToGraph<ma::ParallelForNode<Engine,
         rewardSystem,
+            ma::base::Position,
             Species,
             Health,
-            AgentObservationBridge
+            AgentObservationBridge,
+            AgentStats
         >>({update_sensor_idx});
 
     auto sort_species = queueSortByWorld<SpeciesInfoArchetype>(
