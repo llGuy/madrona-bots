@@ -423,9 +423,9 @@ inline void actionSystem(Engine &ctx,
                         ctx, camera, sizeof(ma::render::FinderOutput));
 
         if (finder_output->hitEntity != ma::Entity::none()) {
-            // Each hit leads to -10 health damage.
+            // Each hit leads to -50 health damage.
             ctx.get<HealthAccumulator>(finder_output->hitEntity).v.
-                fetch_add_relaxed(-10);
+                fetch_add_relaxed(-50);
 
             auto &other_species = ctx.get<Species>(finder_output->hitEntity);
 
@@ -528,7 +528,7 @@ inline void healthSync(Engine &ctx,
     }
 
     // If you choose to breed, you lose 40 health points
-    if (action.breed && health.v > 60) {
+    if (action.breed && health.v > 10) {
         ma::render::FinderOutput *finder_output = 
             (ma::render::FinderOutput *)
                 ma::render::RenderingSystem::getRenderOutput<
@@ -553,7 +553,7 @@ inline void healthSync(Engine &ctx,
     }
 
     // Each agent loses 5 health per tick
-    health.v -= 1;
+    // health.v -= 1;
 
     if (health.v <= 0) {
         // Destroy myself!
@@ -845,19 +845,19 @@ inline void rewardSystem(Engine &ctx,
 
 
     if (agent_stats.reproduced) {
-        reward.v += 2.f;
+        reward.v += 10.f;
     }
 
     if (agent_stats.hitFriendlyAgent) {
-        reward.v -= 1.f;
+        reward.v -= 5.f;
     }
 
     if (agent_stats.hitEnemyAgent) {
-        reward.v += 1.5f;
+        reward.v += 15.f;
     }
 
     if (agent_stats.ateFood) {
-        reward.v += 1.f;
+        reward.v += 7.f;
     }
 
     agent_stats.reproduced = 0;

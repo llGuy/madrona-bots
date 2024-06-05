@@ -45,6 +45,7 @@ def train_step(relative_epoch, carry):
 
     action_tensor = sim_mgr.action_tensor(False).to_torch()
     all_rewards = sim_mgr.reward_tensor(False).to_torch().clone()
+    all_healths = sim_mgr.health_tensor(False).to_torch().clone()
 
     for sp_idx, (sp_start, sp_end) in enumerate(zip(species_start_offsets, species_end_offsets)):
         print("\nSpecies ", sp_idx + 1)
@@ -79,6 +80,7 @@ def train_step(relative_epoch, carry):
                 f"species_{sp_idx+1}_total_loss": total_loss.item(),
                 f"species_{sp_idx+1}_count": sp_end - sp_start,
                 f"species_{sp_idx+1}_reward": rewards.sum().item(), 
+                f"species_{sp_idx+1}_avg_health": all_healths[sp_start:sp_end].mean().item(),
                 f"species_{sp_idx+1}_learning_rate": optimizer.param_groups[0]['lr'],
                 "epoch": epoch,
             })
@@ -102,7 +104,8 @@ def train_step(relative_epoch, carry):
 
 def construct_run_name(args):
     # reward_type_id = '0' # first attempt of reward function definition
-    reward_type_id = '_health_loss' # first attempt of reward function definition
+    # reward_type_id = '_health_loss' # first attempt of reward function definition
+    reward_type_id = '2' # penalty radius, reproduced, ate food, health, 
     run_name = f"universe_{args.universe_id}-r{reward_type_id}"
     return run_name
 
