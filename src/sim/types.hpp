@@ -168,11 +168,14 @@ struct SpeciesInfoArchetype : ma::Archetype<
 
 struct AgentStats {
     // May use these for reward calculation.
-    bool hitFriendlyAgent;
-    bool hitEnemyAgent;
-    bool ateFood;
-    bool reproduced;
+    int32_t hitFriendlyAgent;
+    int32_t hitEnemyAgent;
+    int32_t ateFood;
+    int32_t reproduced;
 };
+
+struct StatsObservation : AgentStats {};
+struct PrevStatsObservation : AgentStats {};
 
 struct Agent : ma::Archetype<
     ma::base::Position,
@@ -225,6 +228,7 @@ struct AgentObservationArchetype : ma::Archetype<
     // The agent observation archetype has the action too because
     // of ordering (sorting based on species index)
     Action,
+    StatsObservation,
 
 
 
@@ -234,7 +238,8 @@ struct AgentObservationArchetype : ma::Archetype<
     PrevHealthObservation,
     PrevSurroundingObservation,
     PrevReward,
-    PrevAction
+    PrevAction,
+    PrevStatsObservation
 > {};
 
 // This is mostly for the visualizer

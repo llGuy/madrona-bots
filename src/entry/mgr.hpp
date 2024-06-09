@@ -47,6 +47,8 @@ public:
 
     ma::py::Tensor actionTensor(bool is_prev = false) const;
 
+    ma::py::Tensor statsTensor(bool is_prev = false) const;
+
     void setAction(uint32_t agent_idx,
                    int32_t forward,
                    int32_t backward,

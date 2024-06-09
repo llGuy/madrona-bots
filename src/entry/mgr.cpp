@@ -382,3 +382,22 @@ ma::py::Tensor Manager::actionTensor(bool is_prev) const
                                    });
     }
 }
+
+ma::py::Tensor Manager::statsTensor(bool is_prev) const
+{
+    if (is_prev) {
+        return impl_->exportTensor(mbots::ExportID::PrevStats,
+                                   ma::py::TensorElementType::Int32,
+                                   {
+                                       impl_->simBridge->totalNumAgents,
+                                       4
+                                   });
+    } else {
+        return impl_->exportTensor(mbots::ExportID::Stats,
+                                   ma::py::TensorElementType::Int32,
+                                   {
+                                       impl_->simBridge->totalNumAgents,
+                                       4
+                                   });
+    }
+}
