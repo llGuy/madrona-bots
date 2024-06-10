@@ -17,8 +17,12 @@ class Engine;
 // Tensors that we want to export to PyTorch
 enum class ExportID : uint32_t {
     Reset,
+
     Action,
     PrevAction,
+
+    HiddenState,
+    PrevHiddenState,
 
     Reward,
     PrevReward,

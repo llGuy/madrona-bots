@@ -401,3 +401,22 @@ ma::py::Tensor Manager::statsTensor(bool is_prev) const
                                    });
     }
 }
+
+ma::py::Tensor Manager::hiddenStateTensor(bool is_prev) const
+{
+    if (is_prev) {
+        return impl_->exportTensor(mbots::ExportID::PrevHiddenState,
+                                   ma::py::TensorElementType::Float32,
+                                   {
+                                       impl_->simBridge->totalNumAgents,
+                                       mbots::kHiddenStateDim
+                                   });
+    } else {
+        return impl_->exportTensor(mbots::ExportID::HiddenState,
+                                   ma::py::TensorElementType::Float32,
+                                   {
+                                       impl_->simBridge->totalNumAgents,
+                                       mbots::kHiddenStateDim
+                                   });
+    }
+}

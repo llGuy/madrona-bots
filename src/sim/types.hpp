@@ -11,6 +11,7 @@ namespace ma = madrona;
 namespace mbots {
 
 inline constexpr uint32_t kNumSpecies = 4;
+inline constexpr uint32_t kHiddenStateDim = 16;
 
 class Engine;
 
@@ -32,6 +33,12 @@ struct Action {
 };
 
 struct PrevAction : Action {};
+
+struct HiddenState {
+    float values[kHiddenStateDim];
+};
+
+struct PrevHiddenState : HiddenState {};
 
 struct Reward {
     float v;
@@ -229,6 +236,7 @@ struct AgentObservationArchetype : ma::Archetype<
     // of ordering (sorting based on species index)
     Action,
     StatsObservation,
+    HiddenState,
 
 
 
@@ -239,7 +247,8 @@ struct AgentObservationArchetype : ma::Archetype<
     PrevSurroundingObservation,
     PrevReward,
     PrevAction,
-    PrevStatsObservation
+    PrevStatsObservation,
+    PrevHiddenState
 > {};
 
 // This is mostly for the visualizer

@@ -41,6 +41,7 @@ NB_MODULE(madrona_bots, m) {
         .def("surrounding_tensor", &Manager::surroundingTensor)
         .def("action_tensor", &Manager::actionTensor)
         .def("stats_tensor", &Manager::statsTensor)
+        .def("hidden_state_tensor", &Manager::hiddenStateTensor)
     ;
 
     nb::class_<ScriptBotsViewer> (m, "ScriptBotsViewer")

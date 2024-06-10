@@ -58,6 +58,9 @@ void Sim::registerTypes(ma::ECSRegistry &registry, const Config &cfg)
     registry.registerComponent<StatsObservation>();
     registry.registerComponent<PrevStatsObservation>();
 
+    registry.registerComponent<HiddenState>();
+    registry.registerComponent<PrevHiddenState>();
+
     registry.registerSingleton<WorldReset>();
     registry.registerSingleton<BridgeSync>();
     registry.registerSingleton<AddFoodSingleton>();
@@ -123,6 +126,11 @@ void Sim::registerTypes(ma::ECSRegistry &registry, const Config &cfg)
             (uint32_t)ExportID::Stats);
     registry.exportColumn<AgentObservationArchetype, PrevStatsObservation>(
             (uint32_t)ExportID::PrevStats);
+
+    registry.exportColumn<AgentObservationArchetype, HiddenState>(
+            (uint32_t)ExportID::HiddenState);
+    registry.exportColumn<AgentObservationArchetype, PrevHiddenState>(
+            (uint32_t)ExportID::PrevHiddenState);
 }
 
 static inline void makeFloorPlane(Engine &ctx,
@@ -936,6 +944,17 @@ inline void shiftObservationsSystem(
     prev_stats_obs.reproduced = stats_obs.reproduced;
 }
 
+inline void shiftHiddenState(
+        Engine &ctx,
+        const HiddenState &hidden_state,
+        PrevHiddenState &prev_hidden_state)
+{
+#pragma unroll
+    for (int i = 0; i < kHiddenStateDim; ++i) {
+        prev_hidden_state.values[i] = hidden_state.values[i];
+    }
+}
+
 static void setupInitTasks(ma::TaskGraphBuilder &builder,
                            const Sim::Config &cfg)
 {
@@ -1099,7 +1118,13 @@ static void setupShiftObservationsTasks(ma::TaskGraphBuilder &builder,
             PrevStatsObservation
         >>({});
 
-    (void)shift_obs_sys;
+    auto shift_hidden_state = builder.addToGraph<ma::ParallelForNode<Engine,
+         shiftHiddenState,
+            HiddenState,
+            PrevHiddenState
+        >>({shift_obs_sys});
+
+    (void)shift_hidden_state;
 }
 
 // Build the task graph
