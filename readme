@@ -18,3 +18,8 @@ pip install -e .
 ## TODO
 
 - Create chunk system to create the smell and sound sensors
+
+Run with cached build
+```
+MADRONA_MWGPU_KERNEL_CACHE=build/cache python learn/training_loop.py
+```

@@ -55,8 +55,27 @@ def train_step(relative_epoch, carry):
         model = species_nets[sp_idx]
         observations = construct_obs(sim_mgr, sp_start, sp_end, prev=False)
         action_probs, new_critic_values = model.forward(observations)
-        actions = torch.distributions.Categorical(logits=action_probs).sample()
 
+        distrib = torch.distributions.Categorical(logits=action_probs)
+        # Epsilon greedy
+        epsilon = args.init_epsilon  # Probability of choosing a random action
+        
+        # Independent exploration
+        # random_decisions = torch.rand(action_probs.size(0), device=device) < epsilon
+        # random_actions = torch.randint(0, args.action_dim, (action_probs.size(0),), device=device)
+        # sampled_actions = distrib.sample()
+        # actions = torch.where(random_decisions, random_actions, sampled_actions)
+
+        # Dependent exploration (all species agents either explore or sample)
+        if torch.rand(1).item() < epsilon:
+            actions = torch.randint(0, args.action_dim, (action_probs.size(0),), device=device)
+        else:
+            actions = distrib.sample()
+        
+        # No epsilon exploration
+        # actions = distrib.sample()
+        
+        print("Average action prob: {:.6f}".format(distrib.log_prob(actions).mean().exp().item()), "Action: ", actions.mode().values.item())
         one_hot_actions = torch.zeros(actions.size(0), args.action_dim, device=device)
         one_hot_actions.scatter_(1, actions.unsqueeze(1), 1)
 
@@ -64,8 +83,9 @@ def train_step(relative_epoch, carry):
         rewards = all_rewards[sp_start:sp_end, :]
         prev_observations = construct_obs(sim_mgr, sp_start, sp_end, prev=True)
         prev_action_probs, prev_critic_values = model.forward(prev_observations.to(model.device))
-        print("Prev action probs: ", prev_action_probs)
-        prev_actions = action_tensor[sp_start:sp_end, :].argmax(dim=1)
+        # if args.verbose:
+            # print("Prev action probs: ", prev_action_probs)
+        prev_actions = action_tensor[sp_start:sp_end, :].argmax(dim=1) # extract index from one hot action encoding
         prev_action_log_probs = prev_action_probs[torch.arange(prev_actions.shape[0]), prev_actions]
         actor_loss, critic_loss = model.compute_loss(prev_action_log_probs, rewards.flatten(), prev_critic_values.flatten(), new_critic_values.flatten())
 
@@ -83,9 +103,14 @@ def train_step(relative_epoch, carry):
                 f"species_{sp_idx+1}_critic_loss": critic_loss.item(),
                 f"species_{sp_idx+1}_total_loss": total_loss.item(),
                 f"species_{sp_idx+1}_count": sp_end - sp_start,
+                f"species_{sp_idx+1}_count (per world)": (sp_end - sp_start) / args.num_worlds,
                 f"species_{sp_idx+1}_reward": rewards.sum().item(), 
                 f"species_{sp_idx+1}_avg_health": all_healths[sp_start:sp_end].mean().item(),
                 f"species_{sp_idx+1}_learning_rate": optimizer.param_groups[0]['lr'],
+                f"species_{sp_idx+1}_avg_action_prob (taken)": distrib.log_prob(actions).mean().exp().item(),
+                f"species_{sp_idx+1}_popular_action (taken)": actions.mode().values.item(),
+                f"species_{sp_idx+1}_popular_action (greedy)": torch.argmax(action_probs, dim=1).mode().values.item(),
+                f"species_{sp_idx+1}_avg_action_entropy": distrib.entropy().mean().item(),
                 "epoch": epoch,
             })
         checkpoint_manager.save(model, optimizer, f"species_{sp_idx+1}", epoch, metric_name='latest', verbose=args.verbose)
@@ -110,15 +135,9 @@ def construct_run_name(args):
     # reward_type_id = '0' # first attempt of reward function definition
     # reward_type_id = '_health_loss' # first attempt of reward function definition
     # reward_type_id = '2' # penalty radius, reproduced, ate food, health, 
-    # reward_type_id = '_food' # only food
-    # reward_type_id = '_reproduce' # only reproduce
-    # reward_type_id = '_food30' # only food, 30 max food
-    # reward_type_id = '_food60' # only food, 60 max food
-    # reward_type_id = '_food60reprod' # food, 60 max, and reproduce (1:1)
-    # reward_type_id = '_reprod0' # reproduce only
-    # reward_type_id = '_hitenemy' # hit enemy only
-    # reward_type_id = '_hitenemy_reprod' # hit enemy, reproduce
-    reward_type_id = '_hitenemy_reprod_food' # hit enemy, reproduce, food (1:1:1)
+    # reward_type_id = 'positive_equal' # reproduced, ate food, hit enemy 
+    # reward_type_id = 'positive_no_health' # reproduced, ate food, hit enemy 
+    reward_type_id = '3' # attempt at making only positive rewards 
     run_name = f"universe_{args.universe_id}-r{reward_type_id}"
     return run_name
 
@@ -203,6 +222,7 @@ def main():
     parser.add_argument('--hidden_dim', type=int, default=128, help='Hidden dimension of the model')
     parser.add_argument('--action_dim', type=int, default=6, help='Action dimension')
     parser.add_argument('--lr', type=float, default=3e-4, help='Learning rate')
+    parser.add_argument('--init_epsilon', type=float, default=0.5, help='Random action probability when starting (in epsilon greedy)')
     parser.add_argument('--num_epochs', type=int, default=100, help='Number of epochs')
     parser.add_argument('--seed', type=int, default=0, help='Random seed')
     parser.add_argument('--use_wandb', action='store_true', help='Enable logging to Weights & Biases')
