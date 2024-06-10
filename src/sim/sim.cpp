@@ -55,6 +55,9 @@ void Sim::registerTypes(ma::ECSRegistry &registry, const Config &cfg)
     registry.registerComponent<SpeciesCount>();
     registry.registerComponent<SpeciesReward>();
 
+    registry.registerComponent<StatsObservation>();
+    registry.registerComponent<PrevStatsObservation>();
+
     registry.registerSingleton<WorldReset>();
     registry.registerSingleton<BridgeSync>();
     registry.registerSingleton<AddFoodSingleton>();
@@ -115,6 +118,11 @@ void Sim::registerTypes(ma::ECSRegistry &registry, const Config &cfg)
             (uint32_t)ExportID::Reward);
     registry.exportColumn<AgentObservationArchetype, PrevReward>(
             (uint32_t)ExportID::PrevReward);
+
+    registry.exportColumn<AgentObservationArchetype, StatsObservation>(
+            (uint32_t)ExportID::Stats);
+    registry.exportColumn<AgentObservationArchetype, PrevStatsObservation>(
+            (uint32_t)ExportID::PrevStats);
 }
 
 static inline void makeFloorPlane(Engine &ctx,
@@ -674,7 +682,8 @@ inline void updateObservations(Engine &ctx,
                                Species &species,
                                ma::base::Position &pos,
                                Health &health,
-                               SurroundingObservation &sur)
+                               SurroundingObservation &sur,
+                               AgentStats &stats)
 {
     ma::Entity obs_e = bridge.obsEntity;
 
@@ -689,6 +698,13 @@ inline void updateObservations(Engine &ctx,
     ctx.get<SurroundingObservation>(obs_e) = {
         sur.presenceHeuristic,
         sur.movementHeuristic
+    };
+
+    ctx.get<StatsObservation>(obs_e) = {
+        stats.hitFriendlyAgent,
+        stats.hitEnemyAgent,
+        stats.ateFood,
+        stats.reproduced
     };
 }
 
@@ -891,12 +907,14 @@ inline void shiftObservationsSystem(
         const SurroundingObservation &sur_obs,
         const Reward &rew_obs,
         const Action &act_obs,
+        const StatsObservation &stats_obs,
         PrevSpeciesObservation &prev_species_obs,
         PrevPositionObservation &prev_pos_obs,
         PrevHealthObservation &prev_health_obs,
         PrevSurroundingObservation &prev_sur_obs,
         PrevReward &prev_rew_obs,
-        PrevAction &prev_act_obs)
+        PrevAction &prev_act_obs,
+        PrevStatsObservation &prev_stats_obs)
 {
     prev_species_obs.speciesID = species_obs.speciesID;
     prev_pos_obs.pos = pos_obs.pos;
@@ -911,6 +929,11 @@ inline void shiftObservationsSystem(
     prev_act_obs.rotateRight = act_obs.rotateRight;
     prev_act_obs.shoot = act_obs.shoot;
     prev_act_obs.breed = act_obs.breed;
+
+    prev_stats_obs.hitFriendlyAgent = stats_obs.hitFriendlyAgent;
+    prev_stats_obs.hitEnemyAgent = stats_obs.hitFriendlyAgent;
+    prev_stats_obs.ateFood = stats_obs.ateFood;
+    prev_stats_obs.reproduced = stats_obs.reproduced;
 }
 
 static void setupInitTasks(ma::TaskGraphBuilder &builder,
@@ -1006,7 +1029,8 @@ static void setupStepTasks(ma::TaskGraphBuilder &builder,
             Species,
             ma::base::Position,
             Health,
-            SurroundingObservation
+            SurroundingObservation,
+            AgentStats,
         >>({recycle_sys});
 
     // Now, sort all the observation entities by species (even across the worlds)
@@ -1021,7 +1045,7 @@ static void setupStepTasks(ma::TaskGraphBuilder &builder,
             SensorOutputIndex,
             ma::render::RenderCamera,
             ma::render::Renderable,
-            Health
+            Health,
         >>({sort_obs});
 
     // Conditionally reset the world if the episode is over
@@ -1065,12 +1089,14 @@ static void setupShiftObservationsTasks(ma::TaskGraphBuilder &builder,
             SurroundingObservation,
             Reward,
             Action,
+            StatsObservation,
             PrevSpeciesObservation,
             PrevPositionObservation,
             PrevHealthObservation,
             PrevSurroundingObservation,
             PrevReward,
-            PrevAction
+            PrevAction,
+            PrevStatsObservation
         >>({});
 
     (void)shift_obs_sys;

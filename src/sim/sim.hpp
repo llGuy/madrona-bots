@@ -40,6 +40,9 @@ enum class ExportID : uint32_t {
     PrevSensorSemantic,
     PrevSensorDepth,
 
+    Stats,
+    PrevStats,
+
     SensorIndex,
 
     SpeciesCount,
