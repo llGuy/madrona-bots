@@ -108,7 +108,7 @@ Manager::Impl *Manager::Impl::make(const Config &mgr_cfg)
         .cellDim = 1.f,
         .renderBridge = mgr_cfg.renderBridge,
         .simBridge = sim_bridge,
-        .totalAllowedFood = 30,
+        .totalAllowedFood = 60,
         .initNumAgentsPerWorld = mgr_cfg.initNumAgentsPerWorld
     };
 
