@@ -10,7 +10,7 @@ class CheckpointManager:
         self.restore = restore
         self._check_dir(base_ckpt_dir)
 
-    def save(self, model, optimizer, sub_dir, epoch, metric_name="latest"):
+    def save(self, model, optimizer, sub_dir, epoch, metric_name="latest", verbose=False):
         full_path = os.path.join(self.base_ckpt_dir, sub_dir)
         self._check_dir(full_path)
         
@@ -31,11 +31,12 @@ class CheckpointManager:
                 'optimizer_state_dict': optimizer.state_dict(),
                 'model_config': model.get_config()
             }, save_path)
-            print(f"Saved model to {save_path}")
+            if verbose:
+                print(f"Saved model to {save_path}")
         except Exception as e:
             print(f"Failed to save model due to error: {e}")
 
-    def load(self, model_class, optimizer_class, sub_dir, init_fn, metric_name="latest"):
+    def load(self, model_class, optimizer_class, sub_dir, init_fn, metric_name="latest", verbose=True):
         pattern = f'latest_model_epoch_*.pt' if metric_name == "latest" else f'best_{metric_name}_epoch_*.pt'
         load_path = os.path.join(self.base_ckpt_dir, sub_dir, pattern)
         files = glob.glob(load_path)
@@ -49,7 +50,8 @@ class CheckpointManager:
 
         assert os.path.isfile(load_path), f"Model file not found at {load_path}"
         assert self.restore, "Restore must be True to load a model"
-        print(f"Loading model from {load_path}")
+        if verbose:
+            print(f"Loading model from {load_path}")
 
         checkpoint = torch.load(load_path)
         model = init_fn(checkpoint['model_config']) if init_fn else model_class(checkpoint['model_config'])

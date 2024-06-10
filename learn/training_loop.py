@@ -16,9 +16,10 @@ class TrainLoopManager:
     def __init__(self, gpu_id, num_worlds, rand_seed, init_num_agents_per_world):
         self.sim_mgr = SimManager(gpu_id, num_worlds, rand_seed, init_num_agents_per_world)
 
-    def loop(self, num_epochs, callable, carry):
+    def loop(self, num_epochs, callable, carry, print_freq=10):
         for relative_epoch in range(1, num_epochs + 1):
-            print("Relative Epoch ", relative_epoch)
+            if relative_epoch % print_freq == 0 or relative_epoch == 1:
+                print("Relative Epoch ", relative_epoch)
             callable(relative_epoch, carry)
 
     def get_sim_mgr(self):
@@ -48,7 +49,8 @@ def train_step(relative_epoch, carry):
     all_healths = sim_mgr.health_tensor(False).to_torch().clone()
 
     for sp_idx, (sp_start, sp_end) in enumerate(zip(species_start_offsets, species_end_offsets)):
-        print("\nSpecies ", sp_idx + 1)
+        if args.verbose:
+            print("\nSpecies ", sp_idx + 1)
         epoch = start_epochs[sp_idx] + relative_epoch
         model = species_nets[sp_idx]
         observations = construct_obs(sim_mgr, sp_start, sp_end, prev=False)
@@ -62,14 +64,16 @@ def train_step(relative_epoch, carry):
         rewards = all_rewards[sp_start:sp_end, :]
         prev_observations = construct_obs(sim_mgr, sp_start, sp_end, prev=True)
         prev_action_probs, prev_critic_values = model.forward(prev_observations.to(model.device))
+        print("Prev action probs: ", prev_action_probs)
         prev_actions = action_tensor[sp_start:sp_end, :].argmax(dim=1)
         prev_action_log_probs = prev_action_probs[torch.arange(prev_actions.shape[0]), prev_actions]
         actor_loss, critic_loss = model.compute_loss(prev_action_log_probs, rewards.flatten(), prev_critic_values.flatten(), new_critic_values.flatten())
 
         optimizer.zero_grad()
         total_loss = actor_loss + critic_loss
-        print("Actor: ", actor_loss.item(), "; Critic: ", critic_loss.item())
-        print("Total Loss: ", total_loss.item())
+        if args.verbose:
+            print("Actor: ", actor_loss.item(), "; Critic: ", critic_loss.item())
+            print("Total Loss: ", total_loss.item())
         total_loss.backward()
         optimizer.step()
 
@@ -84,19 +88,19 @@ def train_step(relative_epoch, carry):
                 f"species_{sp_idx+1}_learning_rate": optimizer.param_groups[0]['lr'],
                 "epoch": epoch,
             })
-        checkpoint_manager.save(model, optimizer, f"species_{sp_idx+1}", epoch, metric_name='latest')
+        checkpoint_manager.save(model, optimizer, f"species_{sp_idx+1}", epoch, metric_name='latest', verbose=args.verbose)
         
         if actor_loss < best_species_actor_loss[sp_idx]:
             best_species_actor_loss[sp_idx] = actor_loss
-            checkpoint_manager.save(model, optimizer, f"species_{sp_idx+1}", epoch, metric_name='actor_loss')
+            checkpoint_manager.save(model, optimizer, f"species_{sp_idx+1}", epoch, metric_name='actor_loss', verbose=args.verbose)
         
         if critic_loss < best_species_critic_loss[sp_idx]:
             best_species_critic_loss[sp_idx] = critic_loss
-            checkpoint_manager.save(model, optimizer, f"species_{sp_idx+1}", epoch, metric_name='critic_loss')
+            checkpoint_manager.save(model, optimizer, f"species_{sp_idx+1}", epoch, metric_name='critic_loss', verbose=args.verbose)
         
         if total_loss < best_species_total_loss[sp_idx]:
             best_species_total_loss[sp_idx] = total_loss
-            checkpoint_manager.save(model, optimizer, f"species_{sp_idx+1}", epoch, metric_name='total_loss')
+            checkpoint_manager.save(model, optimizer, f"species_{sp_idx+1}", epoch, metric_name='total_loss', verbose=args.verbose)
         
         sim_mgr.shift_observations()
         action_tensor[sp_start:sp_end, :] = one_hot_actions.int()
@@ -105,7 +109,16 @@ def train_step(relative_epoch, carry):
 def construct_run_name(args):
     # reward_type_id = '0' # first attempt of reward function definition
     # reward_type_id = '_health_loss' # first attempt of reward function definition
-    reward_type_id = '2' # penalty radius, reproduced, ate food, health, 
+    # reward_type_id = '2' # penalty radius, reproduced, ate food, health, 
+    # reward_type_id = '_food' # only food
+    # reward_type_id = '_reproduce' # only reproduce
+    # reward_type_id = '_food30' # only food, 30 max food
+    # reward_type_id = '_food60' # only food, 60 max food
+    # reward_type_id = '_food60reprod' # food, 60 max, and reproduce (1:1)
+    # reward_type_id = '_reprod0' # reproduce only
+    # reward_type_id = '_hitenemy' # hit enemy only
+    # reward_type_id = '_hitenemy_reprod' # hit enemy, reproduce
+    reward_type_id = '_hitenemy_reprod_food' # hit enemy, reproduce, food (1:1:1)
     run_name = f"universe_{args.universe_id}-r{reward_type_id}"
     return run_name
 
@@ -117,7 +130,7 @@ def train(args):
 
     #sim_mgr = SimManager(0, args.num_worlds, 69, 32)
     gpu_id = 0
-    rand_seed = 0
+    rand_seed = args.seed
     init_num_agents_per_world = 32
 
     set_seed(rand_seed)
@@ -154,11 +167,11 @@ def train(args):
             model = reinit_fn()
             print(f"Species {species_id} model: ", model.get_config())
             optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
-            checkpoint_manager.save(model, optimizer, f"species_{species_id}", 0, metric_name="latest")
+            checkpoint_manager.save(model, optimizer, f"species_{species_id}", 0, metric_name="latest", verbose=True)
             start_epochs.append(0)
         else:
             print(f"Loading cached model for species {species_id}...")
-            model, optimizer, loaded_epoch = checkpoint_manager.load(ActorCritic, torch.optim.Adam, f"species_{species_id}", init_fn=reinit_fn, metric_name=args.model_load)
+            model, optimizer, loaded_epoch = checkpoint_manager.load(ActorCritic, torch.optim.Adam, f"species_{species_id}", init_fn=reinit_fn, metric_name=args.model_load, verbose=True)
             start_epochs.append(loaded_epoch)
         species_nets.append(model)
         species_optims.append(optimizer)
@@ -191,11 +204,13 @@ def main():
     parser.add_argument('--action_dim', type=int, default=6, help='Action dimension')
     parser.add_argument('--lr', type=float, default=3e-4, help='Learning rate')
     parser.add_argument('--num_epochs', type=int, default=100, help='Number of epochs')
+    parser.add_argument('--seed', type=int, default=0, help='Random seed')
     parser.add_argument('--use_wandb', action='store_true', help='Enable logging to Weights & Biases')
     parser.add_argument('--create_universe', action='store_true', help='Create a new universe')
     parser.add_argument('--model_save_dir', type=str, default='checkpoints', help='Directory to save the model')
     parser.add_argument('--model_load', type=str, default='latest', help='Which model to load')
     parser.add_argument('--enable_viewer', action='store_true', help='Enable visualizer while training')
+    parser.add_argument('--verbose', action='store_true', help='Enable verbose output')
     args = parser.parse_args()
 
     train(args)
