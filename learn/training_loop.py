@@ -140,10 +140,13 @@ def train_step(relative_epoch, carry):
 def construct_run_name(args):
     # reward_type_id = '0' # first attempt of reward function definition
     # reward_type_id = '_health_loss' # first attempt of reward function definition
-    reward_type_id = '2' # penalty radius, reproduced, ate food, health, 
-    # reward_type_id = 'positive_equal' # reproduced, ate food, hit enemy 
-    # reward_type_id = 'positive_no_health' # reproduced, ate food, hit enemy 
-    # reward_type_id = '3' # attempt at making only positive rewards 
+    # reward_type_id = '2' # penalty radius, reproduced, ate food, health, 
+    # reward_type_id = '3' # only positive rewards: reproduced, hit enemy, ate food (10, 15, 7)
+    # reward_type_id = '4' # positive rewards: reproduced, hit enemy, ate food (10, 15, 7); negative: hit ally (-5)
+    # reward_type_id = '5' # population health
+    # reward_type_id = '6' # population health, ate food (10)
+    # reward_type_id = '7' # population health, ate food (10), reproduce (10)
+    reward_type_id = '8' # population health, ate food (10), reproduce (10), hit enemy (15) 
     run_name = f"universe_{args.universe_id}-r{reward_type_id}"
     return run_name
 

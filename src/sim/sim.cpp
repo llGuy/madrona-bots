@@ -849,40 +849,132 @@ inline void rewardSystem(Engine &ctx,
 
     Reward &reward = ctx.get<Reward>(bridge.obsEntity);
 
-    reward.v = species_rew.rewards[species.speciesID] +
-               health.v / 100.f - 0.5f;
+// REWARD SETTING 2:
+    // reward.v = species_rew.rewards[species.speciesID] +
+    //            health.v / 100.f - 0.5f;
 
 
     // Agent gets penalized for being at the ends of the world
-    float world_lim_x = ctx.data().numChunksX * ChunkInfo::kChunkWidth * 
-                        ctx.data().cellDim;
-    float world_lim_y = ctx.data().numChunksY * ChunkInfo::kChunkWidth * 
-                        ctx.data().cellDim;
+    // float world_lim_x = ctx.data().numChunksX * ChunkInfo::kChunkWidth * 
+    //                     ctx.data().cellDim;
+    // float world_lim_y = ctx.data().numChunksY * ChunkInfo::kChunkWidth * 
+    //                     ctx.data().cellDim;
 
-    float penalty_radius = 4.f;
-    if (position.x < penalty_radius || position.y < penalty_radius ||
-        position.x > world_lim_x - penalty_radius ||
-        position.y > world_lim_y - penalty_radius) {
-        reward.v -= 1.f;
-    }
+    // float penalty_radius = 4.f;
+    // if (position.x < penalty_radius || position.y < penalty_radius ||
+    //     position.x > world_lim_x - penalty_radius ||
+    //     position.y > world_lim_y - penalty_radius) {
+    //     reward.v -= 1.f;
+    // }
 
 
 
-    if (agent_stats.reproduced) {
+    // if (agent_stats.reproduced) {
+    //     reward.v += 10.f;
+    // }
+
+    // if (agent_stats.hitFriendlyAgent) {
+    //     reward.v -= 5.f;
+    // }
+
+    // if (agent_stats.hitEnemyAgent) {
+    //     reward.v += 15.f;
+    // }
+
+    // if (agent_stats.ateFood) {
+    //     reward.v += 7.f;
+    // }
+
+// REWARD SETTING 3 (Positive Only):
+    // if (agent_stats.reproduced) {
+    //     reward.v += 10.f;
+    // }
+
+    // if (agent_stats.hitEnemyAgent) {
+    //     reward.v += 15.f;
+    // }
+
+    // if (agent_stats.ateFood) {
+    //     reward.v += 7.f;
+    // }
+
+// REWARD SETTING 4:
+    // if (agent_stats.reproduced) {
+    //     reward.v += 10.f;
+    // }
+
+    // if (agent_stats.hitEnemyAgent) {
+    //     reward.v += 15.f;
+    // }
+
+    // if (agent_stats.hitFriendlyAgent) {
+    //     reward.v -= 5.f;
+    // }
+
+    // if (agent_stats.ateFood) {
+    //     reward.v += 7.f;
+    // }
+
+// REWARD SETTING 5: population health
+    // reward.v = species_rew.rewards[species.speciesID] +
+    //            health.v / 100.f - 0.5f;
+
+// REWARD SETTING 6: population health, 
+    // reward.v = species_rew.rewards[species.speciesID] +
+    //            health.v / 100.f - 0.5f;
+
+    // if (agent_stats.ateFood) {
+    //     reward.v += 10.f;
+    // }
+
+// REWARD SETTING 7: population health, ate food, reproduced
+    // reward.v = species_rew.rewards[species.speciesID] +
+    //            health.v / 100.f - 0.5f;
+
+    // if (agent_stats.ateFood) {
+    //     reward.v += 10.f;
+    // }
+
+    // if (agent_stats.reproduced) {
+    //     reward.v += 10.f;
+    // } 
+
+// REWARD SETTING 8: population health, ate food, reproduced, 
+    reward.v = species_rew.rewards[species.speciesID] +
+               health.v / 100.f - 0.5f;
+
+    if (agent_stats.ateFood) {
         reward.v += 10.f;
     }
 
-    if (agent_stats.hitFriendlyAgent) {
-        reward.v -= 5.f;
-    }
+    if (agent_stats.reproduced) {
+        reward.v += 10.f;
+    } 
 
     if (agent_stats.hitEnemyAgent) {
         reward.v += 15.f;
     }
 
-    if (agent_stats.ateFood) {
-        reward.v += 7.f;
-    }
+
+// REWARD SETTING 7: population health, eat food
+    // reward.v = species_rew.rewards[species.speciesID] +
+    //            health.v / 100.f - 0.5f;
+
+    // if (agent_stats.reproduced) {
+    //     reward.v += 10.f;
+    // }
+
+    // if (agent_stats.hitFriendlyAgent) {
+    //     reward.v -= 5.f;
+    // }
+
+    // if (agent_stats.hitEnemyAgent) {
+    //     reward.v += 15.f;
+    // }
+
+    // if (agent_stats.ateFood) {
+    //     reward.v += 7.f;
+    // }
 
     agent_stats.reproduced = 0;
     agent_stats.hitFriendlyAgent = 0;
