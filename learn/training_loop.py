@@ -45,6 +45,7 @@ def train_step(relative_epoch, carry):
     species_start_offsets = torch.cat((torch.zeros(1, dtype=torch.int, device=device), species_end_offsets[:-1]))
 
     action_tensor = sim_mgr.action_tensor(False).to_torch()
+    memory_tensor = sim_mgr.hidden_state_tensor(False).to_torch()
     all_rewards = sim_mgr.reward_tensor(False).to_torch().clone()
     all_healths = sim_mgr.health_tensor(False).to_torch().clone()
 
@@ -54,11 +55,13 @@ def train_step(relative_epoch, carry):
         epoch = start_epochs[sp_idx] + relative_epoch
         model = species_nets[sp_idx]
         observations = construct_obs(sim_mgr, sp_start, sp_end, prev=False)
-        action_probs, new_critic_values = model.forward(observations)
+        prev_memory = memory_tensor[sp_start:sp_end, :]
+        action_probs, new_critic_values, species_memory = model.forward(observations, prev_memory)
+        new_memory = model.generate_memory(observations, species_memory)
 
         distrib = torch.distributions.Categorical(logits=action_probs)
         # Epsilon greedy
-        epsilon = args.init_epsilon  # Probability of choosing a random action
+        # epsilon = args.init_epsilon  # Probability of choosing a random action
         
         # Independent exploration
         # random_decisions = torch.rand(action_probs.size(0), device=device) < epsilon
@@ -67,13 +70,13 @@ def train_step(relative_epoch, carry):
         # actions = torch.where(random_decisions, random_actions, sampled_actions)
 
         # Dependent exploration (all species agents either explore or sample)
-        if torch.rand(1).item() < epsilon:
-            actions = torch.randint(0, args.action_dim, (action_probs.size(0),), device=device)
-        else:
-            actions = distrib.sample()
+        # if torch.rand(1).item() < epsilon:
+        #     actions = torch.randint(0, args.action_dim, (action_probs.size(0),), device=device)
+        # else:
+        #     actions = distrib.sample()
         
         # No epsilon exploration
-        # actions = distrib.sample()
+        actions = distrib.sample()
         
         print("Average action prob: {:.6f}".format(distrib.log_prob(actions).mean().exp().item()), "Action: ", actions.mode().values.item())
         one_hot_actions = torch.zeros(actions.size(0), args.action_dim, device=device)
@@ -82,7 +85,9 @@ def train_step(relative_epoch, carry):
         optimizer = species_optims[sp_idx]
         rewards = all_rewards[sp_start:sp_end, :]
         prev_observations = construct_obs(sim_mgr, sp_start, sp_end, prev=True)
-        prev_action_probs, prev_critic_values = model.forward(prev_observations.to(model.device))
+
+        og_hidden_state = sim_mgr.hidden_state_tensor(True).to_torch()[sp_start:sp_end, :]
+        prev_action_probs, prev_critic_values, _ = model.forward(prev_observations.to(model.device), og_hidden_state)
         # if args.verbose:
             # print("Prev action probs: ", prev_action_probs)
         prev_actions = action_tensor[sp_start:sp_end, :].argmax(dim=1) # extract index from one hot action encoding
@@ -129,15 +134,16 @@ def train_step(relative_epoch, carry):
         
         sim_mgr.shift_observations()
         action_tensor[sp_start:sp_end, :] = one_hot_actions.int()
+        memory_tensor[sp_start:sp_end, :] = new_memory
 
 
 def construct_run_name(args):
     # reward_type_id = '0' # first attempt of reward function definition
     # reward_type_id = '_health_loss' # first attempt of reward function definition
-    # reward_type_id = '2' # penalty radius, reproduced, ate food, health, 
+    reward_type_id = '2' # penalty radius, reproduced, ate food, health, 
     # reward_type_id = 'positive_equal' # reproduced, ate food, hit enemy 
     # reward_type_id = 'positive_no_health' # reproduced, ate food, hit enemy 
-    reward_type_id = '3' # attempt at making only positive rewards 
+    # reward_type_id = '3' # attempt at making only positive rewards 
     run_name = f"universe_{args.universe_id}-r{reward_type_id}"
     return run_name
 
@@ -174,10 +180,10 @@ def train(args):
         assert os.path.exists(base_ckpt_dir), f"Universe {args.universe_id} does not exist"
 
     checkpoint_manager = CheckpointManager(base_ckpt_dir, restore=True)
-    species_generator = SpeciesNetGenerator(args.obs_dim, args.action_dim, args.hidden_dim)
+    species_generator = SpeciesNetGenerator(args.obs_dim, args.action_dim, args.hidden_dim, args.memory_dim)
 
     def reinit_fn(config=None):
-        return ActorCritic(args.obs_dim, args.action_dim, species_generator, device, config)
+        return ActorCritic(species_generator, device, config)
 
     start_epochs = []
     for species_id in range(1, args.num_species + 1):
@@ -221,6 +227,7 @@ def main():
     parser.add_argument('--obs_dim', type=int, default=69, help='Observation dimension')
     parser.add_argument('--hidden_dim', type=int, default=128, help='Hidden dimension of the model')
     parser.add_argument('--action_dim', type=int, default=6, help='Action dimension')
+    parser.add_argument('--memory_dim', type=int, default=16, help='RNN hidden state dimension')
     parser.add_argument('--lr', type=float, default=3e-4, help='Learning rate')
     parser.add_argument('--init_epsilon', type=float, default=0.5, help='Random action probability when starting (in epsilon greedy)')
     parser.add_argument('--num_epochs', type=int, default=100, help='Number of epochs')
